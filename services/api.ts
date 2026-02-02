@@ -51,26 +51,31 @@ export const api = {
   },
 
   // 🔹 ML recommendations
-  async getRecommendations(productId: string): Promise<Product[]> {
-    const res = await fetch('http://localhost:5001/recommend', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product_id: productId })
-    });
+async getRecommendations(productId: string): Promise<Product[]> {
+  const ML_API = import.meta.env.VITE_ML_API_URL;
 
-    const ids: string[] = await res.json();
-    if (!ids.length) return [];
+  const res = await fetch(`${ML_API}/recommend`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ product_id: productId })
+  });
 
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .in('id', ids);
+  if (!res.ok) return [];
 
-    if (error) {
-      console.error('Supabase error:', error);
-      return [];
-    }
+  const ids: string[] = await res.json();
+  if (!ids.length) return [];
 
-    return (data || []) as Product[];
+  const { data, error } = await supabase
+    .from('products')
+    .select('*')
+    .in('id', ids);
+
+  if (error) {
+    console.error('Supabase error:', error);
+    return [];
   }
+
+  return (data || []) as Product[];
+}
+
 };
