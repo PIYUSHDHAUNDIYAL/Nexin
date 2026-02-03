@@ -17,9 +17,30 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({
   const [product, setProduct] = useState<Product | null>(null);
   const [recommendations, setRecommendations] = useState<Product[]>([]);
   const [recentlyViewed, setRecentlyViewed] = useState<Product[]>([]);
+  const [wishlist, setWishlist] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [recLoading, setRecLoading] = useState(false);
 
+  /* ================= Load Wishlist ================= */
+  useEffect(() => {
+    const saved = JSON.parse(
+      localStorage.getItem('wishlist') || '[]'
+    ) as string[];
+    setWishlist(saved);
+  }, []);
+
+  const toggleWishlist = (id: string) => {
+    setWishlist(prev => {
+      const updated = prev.includes(id)
+        ? prev.filter(pid => pid !== id)
+        : [...prev, id];
+
+      localStorage.setItem('wishlist', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  /* ================= Load Product + ML ================= */
   useEffect(() => {
     let mounted = true;
 
@@ -29,28 +50,34 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({
       setRecentlyViewed([]);
 
       try {
+        // 1️⃣ Fetch product (dataset ID)
         const prod = await api.getProduct(String(productId));
         if (!mounted) return;
 
         setProduct(prod);
+
+        // 2️⃣ Track view
         api.trackView(String(prod.id));
 
+        // 3️⃣ Get recommendations
         setRecLoading(true);
         const recs = await api.getRecommendations(String(prod.id));
         if (mounted) setRecommendations(recs);
 
+        // 4️⃣ Recently viewed
         const viewedIds = JSON.parse(
           localStorage.getItem('recentlyViewed') || '[]'
         ) as string[];
 
         const allProducts = await api.getProducts();
+
         const recent = allProducts.filter(
           p => viewedIds.includes(p.id) && p.id !== prod.id
         );
 
         if (mounted) setRecentlyViewed(recent);
       } catch (err) {
-        console.error(err);
+        console.error('Error loading product details:', err);
       } finally {
         if (mounted) {
           setLoading(false);
@@ -167,8 +194,8 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({
               <ProductCard
                 key={rec.id}
                 product={rec}
-                isWishlisted={false}
-                onToggleWishlist={() => {}}
+                isWishlisted={wishlist.includes(rec.id)}
+                onToggleWishlist={toggleWishlist}
                 onClick={(id) => onNavigate('product', id)}
                 onAddToCart={(p, e) => {
                   e.stopPropagation();
@@ -194,8 +221,8 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({
               <ProductCard
                 key={p.id}
                 product={p}
-                isWishlisted={false}
-                onToggleWishlist={() => {}}
+                isWishlisted={wishlist.includes(p.id)}
+                onToggleWishlist={toggleWishlist}
                 onClick={(id) => onNavigate('product', id)}
                 onAddToCart={(prod, e) => {
                   e.stopPropagation();
