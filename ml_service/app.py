@@ -89,6 +89,13 @@ else:
 
 # ---------------- Routes ---------------- #
 
+@app.route("/", methods=["GET"])
+def root():
+    return jsonify({
+        "service": "Nexin ML Recommendation API",
+        "status": "running"
+    })
+
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({
