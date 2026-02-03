@@ -11,7 +11,18 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
+CORS(
+    app,
+    resources={
+        r"/*": {
+            "origins": [
+                "https://nexin.vercel.app",
+                "https://nexin-seven.vercel.app"
+            ]
+        }
+    }
+)
+
 
 TOP_N = 5
 PRICE_RANGE = 0.30      # ±30%
