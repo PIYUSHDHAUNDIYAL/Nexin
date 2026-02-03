@@ -112,10 +112,7 @@ Products are stored in Supabase
 Frontend fetches products using Supabase REST API
 When a product is viewed:
 
-View is tracked
-
-Product ID is sent to ML service
-
-ML service returns recommended product IDs
-
-Frontend displays recommendations with UI explainability
+>View is tracked
+>Product ID is sent to ML service
+>ML service returns recommended product IDs
+>Frontend displays recommendations with UI explainability
