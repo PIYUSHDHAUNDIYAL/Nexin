@@ -41,7 +41,14 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
-# ---------------- Load Data from Supabase ---------------- #
+# ---------------- Globals ---------------- #
+df = pd.DataFrame()
+tfidf_matrix = None
+cosine_sim = None
+indices = {}
+max_price = 1
+
+# ---------------- Load Data ---------------- #
 def load_products():
     url = f"{SUPABASE_URL}/rest/v1/products?select=id,name,brand,category,description,price"
     res = requests.get(url, headers=HEADERS, timeout=30)
@@ -54,52 +61,7 @@ def load_products():
     print(f"✅ Loaded {len(data)} products from Supabase")
     return pd.DataFrame(data)
 
-# ---------------- Build / Rebuild ML Model ---------------- #
-def rebuild_model():
-    global df, tfidf_matrix, cosine_sim, indices, max_price
-
-    df = load_products()
-    if df.empty:
-        print("❌ ML rebuild failed: no data")
-        return False
-
-    for col in ["name", "brand", "category", "description"]:
-        df[col] = df[col].fillna("").astype(str)
-
-    df["price"] = pd.to_numeric(df["price"], errors="coerce").fillna(0)
-
-    df["soup"] = (
-        df["name"] + " " +
-        df["brand"] + " " +
-        df["category"] + " " +
-        df["description"]
-    )
-
-    tfidf = TfidfVectorizer(
-        stop_words="english",
-        ngram_range=(1, 2),
-        max_df=0.8,
-        min_df=1
-    )
-
-    tfidf_matrix = tfidf.fit_transform(df["soup"])
-    cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
-    indices = pd.Series(df.index, index=df["id"].astype(str)).drop_duplicates()
-    max_price = df["price"].max() if df["price"].max() > 0 else 1
-
-    cached_recommend.cache_clear()
-    print("✅ ML model rebuilt & cache cleared")
-    return True
-
-# Initial load
-df = pd.DataFrame()
-tfidf_matrix = None
-cosine_sim = None
-indices = {}
-max_price = 1
-rebuild_model()
-
-# ---------------- Cached Recommendation Logic ---------------- #
+# ---------------- Cached Recommendation ---------------- #
 @lru_cache(maxsize=5000)
 def cached_recommend(product_id: str):
     if product_id not in indices:
@@ -143,8 +105,43 @@ def cached_recommend(product_id: str):
         fallback.sort(key=lambda x: x[1], reverse=True)
         scores.extend(fallback)
 
-    top_matches = scores[:TOP_N]
-    return df.loc[[i[0] for i in top_matches], "id"].astype(str).tolist()
+    return df.loc[[i[0] for i in scores[:TOP_N]], "id"].astype(str).tolist()
+
+# ---------------- Build / Rebuild Model ---------------- #
+def rebuild_model():
+    global df, tfidf_matrix, cosine_sim, indices, max_price
+
+    df = load_products()
+    if df.empty:
+        print("❌ ML rebuild failed: no data")
+        return False
+
+    for col in ["name", "brand", "category", "description"]:
+        df[col] = df[col].fillna("").astype(str)
+
+    df["price"] = pd.to_numeric(df["price"], errors="coerce").fillna(0)
+
+    df["soup"] = df["name"] + " " + df["brand"] + " " + df["category"] + " " + df["description"]
+
+    tfidf = TfidfVectorizer(
+        stop_words="english",
+        ngram_range=(1, 2),
+        max_df=0.8,
+        min_df=1
+    )
+
+    tfidf_matrix = tfidf.fit_transform(df["soup"])
+    cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
+
+    indices = pd.Series(df.index, index=df["id"].astype(str)).drop_duplicates()
+    max_price = df["price"].max() if df["price"].max() > 0 else 1
+
+    cached_recommend.cache_clear()
+    print("♻️ ML model rebuilt & cache cleared")
+    return True
+
+# Initial load (safe now)
+rebuild_model()
 
 # ---------------- Routes ---------------- #
 @app.route("/", methods=["GET"])
@@ -176,7 +173,7 @@ def reload_model():
     success = rebuild_model()
     return jsonify({"reloaded": success})
 
-# ---------------- Run (Render Compatible) ---------------- #
+# ---------------- Run ---------------- #
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     print(f"🚀 Nexin ML Service running on port {port}")
