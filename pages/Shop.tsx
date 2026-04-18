@@ -183,7 +183,7 @@ export const Shop: React.FC<ShopProps> = ({
         </section>
       )}
 
-      {/* ================= Product Grid ================= */}
+      {/* ================= Product Grids ================= */}
       <section>
         <h2 className="text-xl font-semibold mb-4">
           {activeCategory === 'All' ? 'All Products' : activeCategory}
