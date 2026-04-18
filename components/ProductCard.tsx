@@ -28,7 +28,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         cursor-pointer
       "
     >
-      {/* ❤️ Wishlist */}
+      {/*  Wishlist */}
       <button
         aria-label="Toggle wishlist"
         onClick={(e) => {
@@ -48,7 +48,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         </span>
       </button>
 
-      {/* 🖼 Image */}
+      {/*  Image */}
       <div className="overflow-hidden rounded-t-2xl">
         <img
           src={product.image}
@@ -61,7 +61,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         />
       </div>
 
-      {/* 📦 Content */}
+      {/*  Content */}
       <div className="p-4 flex flex-col flex-grow">
         {/* Brand */}
         <p className="text-xs uppercase tracking-wide text-gray-400">
