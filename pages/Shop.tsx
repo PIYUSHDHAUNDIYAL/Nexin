@@ -160,7 +160,7 @@ export const Shop: React.FC<ShopProps> = ({
       {wishlist.length > 0 && (
         <section className="mb-16">
           <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            ❤️ Wishlist
+             Wishlist
           </h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
