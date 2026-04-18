@@ -173,7 +173,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({
       {/* ===== AI Recommendations ===== */}
       <section className="mt-24 border-t pt-12">
         <h2 className="text-2xl font-bold mb-1 flex items-center gap-2">
-          🤖 AI Recommended for You
+           AI Recommended for You
         </h2>
         <p className="text-sm text-gray-500 mb-6">
           Based on brand, category, and price similarity
