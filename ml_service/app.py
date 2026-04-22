@@ -1,180 +1,100 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from functools import lru_cache
-import os
-import requests
-from dotenv import load_dotenv
+# 🔥 ADD THESE IMPORTS AT TOP
 
-# ---------------- Setup ---------------- #
-load_dotenv()
+import torch
+import torchvision.models as models
+import torchvision.transforms as transforms
+from PIL import Image
+import numpy as np
 
-app = Flask(__name__)
-CORS(
-    app,
-    resources={
-        r"/*": {
-            "origins": [
-                "https://nexin.vercel.app",
-                "https://nexin-seven.vercel.app"
-            ]
-        }
-    }
-)
+# ---------------- IMAGE MODEL ----------------
 
-TOP_N = 5
-PRICE_RANGE = 0.30
-BRAND_BOOST = 0.05
+model = models.mobilenet_v2(pretrained=True).features
+model.eval()
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-ADMIN_RELOAD_TOKEN = os.getenv("ADMIN_RELOAD_TOKEN")
+transform = transforms.Compose([
+transforms.Resize((224, 224)),
+transforms.ToTensor()
+])
 
-if not SUPABASE_URL or not SUPABASE_KEY:
-    raise RuntimeError("❌ Supabase environment variables not set")
+def extract_features(image):
+image = transform(image).unsqueeze(0)
+with torch.no_grad():
+features = model(image)
+return features.numpy().flatten()
 
-HEADERS = {
-    "apikey": SUPABASE_KEY,
-    "Authorization": f"Bearer {SUPABASE_KEY}",
-    "Content-Type": "application/json"
-}
+# ---------------- IMAGE STORAGE ----------------
 
-# ---------------- Globals ---------------- #
-df = pd.DataFrame()
-tfidf_matrix = None
-cosine_sim = None
-indices = {}
-max_price = 1
+image_features = {}
 
-# ---------------- Load Data ---------------- #
+def load_image_features():
+global image_features
+
+```
+print("📸 Loading image features...")
+
+for _, row in df.iterrows():
+    img_url = row.get("image")
+
+    if not img_url:
+        continue
+
+    try:
+        response = requests.get(img_url, stream=True, timeout=10)
+        img = Image.open(response.raw).convert("RGB")
+
+        image_features[str(row["id"])] = extract_features(img)
+
+    except Exception as e:
+        print("❌ Image load failed:", e)
+
+print(f"✅ Loaded {len(image_features)} image embeddings")
+```
+
+# ---------------- MODIFY LOAD PRODUCTS ----------------
+
 def load_products():
-    url = f"{SUPABASE_URL}/rest/v1/products?select=id,name,brand,category,description,price"
-    res = requests.get(url, headers=HEADERS, timeout=30)
+url = f"{SUPABASE_URL}/rest/v1/products?select=id,name,brand,category,description,price,image"
+res = requests.get(url, headers=HEADERS, timeout=30)
 
-    if res.status_code != 200:
-        print("❌ Supabase fetch failed:", res.text)
-        return pd.DataFrame()
+```
+if res.status_code != 200:
+    print("❌ Supabase fetch failed:", res.text)
+    return pd.DataFrame()
 
-    data = res.json()
-    print(f"✅ Loaded {len(data)} products from Supabase")
-    return pd.DataFrame(data)
+data = res.json()
+print(f"✅ Loaded {len(data)} products from Supabase")
+return pd.DataFrame(data)
+```
 
-# ---------------- Cached Recommendation ---------------- #
-@lru_cache(maxsize=5000)
-def cached_recommend(product_id: str):
-    if product_id not in indices:
-        return []
+# ---------------- CALL AFTER MODEL BUILD ----------------
 
-    idx = indices[product_id]
-    base = df.loc[idx]
+rebuild_model()
+load_image_features()
 
-    base_category = base["category"]
-    base_brand = base["brand"]
-    base_price = base["price"]
+# ---------------- NEW IMAGE RECOMMEND ROUTE ----------------
 
-    candidate_indices = df[df["category"] == base_category].index.tolist()
-    if len(candidate_indices) <= 1:
-        candidate_indices = df.index.tolist()
+@app.route("/image-recommend", methods=["POST"])
+def image_recommend():
+try:
+file = request.files["image"]
+image = Image.open(file.stream).convert("RGB")
+
+```
+    query_features = extract_features(image)
 
     scores = []
 
-    for i in candidate_indices:
-        if i == idx:
-            continue
-
-        text_sim = cosine_sim[idx][i]
-
-        if base_price > 0 and abs(df.loc[i, "price"] - base_price) > PRICE_RANGE * base_price:
-            continue
-
-        price_sim = (
-            1 - abs(df.loc[i, "price"] - base_price) / max_price
-            if base_price > 0 else 0
-        )
-
-        brand_sim = BRAND_BOOST if df.loc[i, "brand"] == base_brand else 0
-        final_score = (0.80 * text_sim) + (0.15 * price_sim) + brand_sim
-        scores.append((i, final_score))
+    for pid, feat in image_features.items():
+        sim = cosine_similarity([query_features], [feat])[0][0]
+        scores.append((pid, sim))
 
     scores.sort(key=lambda x: x[1], reverse=True)
 
-    if len(scores) < TOP_N:
-        fallback = [(i, cosine_sim[idx][i]) for i in df.index if i != idx]
-        fallback.sort(key=lambda x: x[1], reverse=True)
-        scores.extend(fallback)
+    top_ids = [pid for pid, _ in scores[:5]]
 
-    return df.loc[[i[0] for i in scores[:TOP_N]], "id"].astype(str).tolist()
+    return jsonify(top_ids)
 
-# ---------------- Build / Rebuild Model ---------------- #
-def rebuild_model():
-    global df, tfidf_matrix, cosine_sim, indices, max_price
-
-    df = load_products()
-    if df.empty:
-        print("❌ ML rebuild failed: no data")
-        return False
-
-    for col in ["name", "brand", "category", "description"]:
-        df[col] = df[col].fillna("").astype(str)
-
-    df["price"] = pd.to_numeric(df["price"], errors="coerce").fillna(0)
-
-    df["soup"] = df["name"] + " " + df["brand"] + " " + df["category"] + " " + df["description"]
-
-    tfidf = TfidfVectorizer(
-        stop_words="english",
-        ngram_range=(1, 2),
-        max_df=0.8,
-        min_df=1
-    )
-
-    tfidf_matrix = tfidf.fit_transform(df["soup"])
-    cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
-
-    indices = pd.Series(df.index, index=df["id"].astype(str)).drop_duplicates()
-    max_price = df["price"].max() if df["price"].max() > 0 else 1
-
-    cached_recommend.cache_clear()
-    print("♻️ ML model rebuilt & cache cleared")
-    return True
-
-# Initial load (safe now)
-rebuild_model()
-
-# ---------------- Routes ---------------- #
-@app.route("/", methods=["GET"])
-def root():
-    return jsonify({
-        "service": "Nexin ML Recommendation API",
-        "status": "running"
-    })
-
-@app.route("/health", methods=["GET"])
-def health():
-    return jsonify({
-        "status": "ML Service Running",
-        "products_loaded": int(len(df))
-    })
-
-@app.route("/recommend", methods=["POST"])
-def recommend():
-    payload = request.get_json(force=True)
-    product_id = str(payload.get("product_id", ""))
-    return jsonify(cached_recommend(product_id))
-
-@app.route("/reload", methods=["POST"])
-def reload_model():
-    token = request.headers.get("X-ADMIN-TOKEN")
-    if token != ADMIN_RELOAD_TOKEN:
-        return jsonify({"error": "Unauthorized"}), 401
-
-    success = rebuild_model()
-    return jsonify({"reloaded": success})
-
-# ---------------- Run ---------------- #
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    print(f"🚀 Nexin ML Service running on port {port}")
-    app.run(host="0.0.0.0", port=port)
+except Exception as e:
+    print("❌ Image recommend error:", str(e))
+    return jsonify({"error": "Failed"}), 500
+```
