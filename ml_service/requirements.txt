@@ -4,5 +4,4 @@ pandas
 scikit-learn
 requests
 python-dotenv
-pillow
 gunicorn
