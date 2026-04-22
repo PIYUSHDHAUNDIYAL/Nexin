@@ -7,7 +7,7 @@ import os
 import requests
 from dotenv import load_dotenv
 
-# ---------------- SAFE IMAGE IMPORT (NO CRASH) ----------------
+# ---------------- SAFE IMAGE IMPORT ----------------
 
 try:
 import torch
@@ -41,7 +41,7 @@ HEADERS = {
 "Content-Type": "application/json"
 }
 
-# ---------------- IMAGE MODEL (SAFE INIT) ----------------
+# ---------------- IMAGE MODEL ----------------
 
 if MODEL_AVAILABLE:
 model = models.mobilenet_v2(pretrained=True).features
