@@ -20,12 +20,10 @@ import numpy as np
 
 load_dotenv()
 
-app = Flask(**name**)
+app = Flask(**name**)   # ✅ FIXED
 CORS(app)
 
 TOP_N = 5
-PRICE_RANGE = 0.30
-BRAND_BOOST = 0.05
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
@@ -61,7 +59,6 @@ df = pd.DataFrame()
 tfidf_matrix = None
 cosine_sim = None
 indices = {}
-max_price = 1
 image_features = {}
 
 # ---------------- Load Data ----------------
@@ -83,10 +80,10 @@ return pd.DataFrame(data)
 # ---------------- Build Model ----------------
 
 def rebuild_model():
-global df, tfidf_matrix, cosine_sim, indices, max_price
+global df, tfidf_matrix, cosine_sim, indices
 
 ```
-df = load_products().head(150)  # 🔥 LIMIT for Render
+df = load_products().head(150)  # 🔥 LIMIT
 
 if df.empty:
     print("❌ No data")
@@ -94,8 +91,6 @@ if df.empty:
 
 for col in ["name", "brand", "category", "description"]:
     df[col] = df[col].fillna("").astype(str)
-
-df["price"] = pd.to_numeric(df["price"], errors="coerce").fillna(0)
 
 df["soup"] = df["name"] + " " + df["brand"] + " " + df["category"] + " " + df["description"]
 
@@ -105,7 +100,6 @@ tfidf_matrix = tfidf.fit_transform(df["soup"])
 cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
 
 indices = pd.Series(df.index, index=df["id"].astype(str)).drop_duplicates()
-max_price = df["price"].max() if df["price"].max() > 0 else 1
 
 print("♻️ Model ready")
 return True
@@ -173,7 +167,6 @@ image = Image.open(file.stream).convert("RGB")
     query_features = extract_features(image)
 
     scores = []
-
     for pid, feat in image_features.items():
         sim = cosine_similarity([query_features], [feat])[0][0]
         scores.append((pid, sim))
@@ -181,7 +174,6 @@ image = Image.open(file.stream).convert("RGB")
     scores.sort(key=lambda x: x[1], reverse=True)
 
     top_ids = [pid for pid, _ in scores[:5]]
-
     return jsonify(top_ids)
 
 except Exception as e:
@@ -204,6 +196,6 @@ return jsonify({
 
 # ---------------- Run ----------------
 
-if **name** == "**main**":
+if **name** == "**main**":   # ✅ FIXED
 port = int(os.environ.get("PORT", 5000))
 app.run(host="0.0.0.0", port=port)
