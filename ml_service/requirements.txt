@@ -2,7 +2,8 @@ flask
 flask-cors
 pandas
 scikit-learn
-numpy
 requests
 python-dotenv
-gunicorn
+pillow
+torch
+torchvision
