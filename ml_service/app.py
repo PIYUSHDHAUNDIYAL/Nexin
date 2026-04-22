@@ -16,6 +16,8 @@ transforms.Resize((224, 224)),
 transforms.ToTensor()
 ])
 
+# ---------------- FEATURE EXTRACTION ----------------
+
 def extract_features(image):
 image = transform(image).unsqueeze(0)
 with torch.no_grad():
