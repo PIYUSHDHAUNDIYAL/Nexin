@@ -5,6 +5,4 @@ scikit-learn
 requests
 python-dotenv
 pillow
-torch
-torchvision
 gunicorn
