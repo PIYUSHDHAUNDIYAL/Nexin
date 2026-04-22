@@ -7,21 +7,6 @@ import os
 import requests
 from dotenv import load_dotenv
 
-# ---------------- SAFE IMAGE IMPORT ----------------
-
-try:
-import torch
-import torchvision.models as models
-import torchvision.transforms as transforms
-from PIL import Image
-
-```
-MODEL_AVAILABLE = True
-```
-
-except:
-MODEL_AVAILABLE = False
-
 # ---------------- Setup ----------------
 
 load_dotenv()
@@ -41,36 +26,12 @@ HEADERS = {
 "Content-Type": "application/json"
 }
 
-# ---------------- IMAGE MODEL ----------------
-
-if MODEL_AVAILABLE:
-model = models.mobilenet_v2(pretrained=True).features
-model.eval()
-
-```
-transform = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor()
-])
-
-def extract_features(image):
-    image = transform(image).unsqueeze(0)
-    with torch.no_grad():
-        features = model(image)
-    return features.numpy().flatten()
-```
-
-else:
-def extract_features(image):
-return []
-
 # ---------------- Globals ----------------
 
 df = pd.DataFrame()
 tfidf_matrix = None
 cosine_sim = None
 indices = {}
-image_features = {}
 
 # ---------------- Load Products ----------------
 
@@ -86,7 +47,7 @@ if res.status_code != 200:
 return pd.DataFrame(res.json())
 ```
 
-# ---------------- Build Text Model ----------------
+# ---------------- Build Model ----------------
 
 def rebuild_model():
 global df, tfidf_matrix, cosine_sim, indices
@@ -110,38 +71,9 @@ cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
 indices = pd.Series(df.index, index=df["id"].astype(str)).drop_duplicates()
 ```
 
-# ---------------- Load Image Features ----------------
-
-def load_image_features():
-global image_features
-
-```
-if not MODEL_AVAILABLE:
-    print("Image model disabled")
-    return
-
-print("Loading image features...")
-
-for _, row in df.iterrows():
-    url = row.get("image")
-
-    if not url:
-        continue
-
-    try:
-        res = requests.get(url, stream=True, timeout=5)
-        img = Image.open(res.raw).convert("RGB")
-
-        image_features[str(row["id"])] = extract_features(img)
-
-    except:
-        continue
-```
-
 # ---------------- Init ----------------
 
 rebuild_model()
-load_image_features()
 
 # ---------------- TEXT RECOMMEND ----------------
 
@@ -162,34 +94,17 @@ result = [str(df.iloc[i[0]]["id"]) for i in scores[1:6]]
 return jsonify(result)
 ```
 
-# ---------------- IMAGE RECOMMEND ----------------
+# ---------------- IMAGE RECOMMEND (SAFE VERSION) ----------------
 
 @app.route("/image-recommend", methods=["POST"])
 def image_recommend():
 try:
-# fallback if model not available
-if not MODEL_AVAILABLE:
-return jsonify([str(p["id"]) for p in df.head(5).to_dict("records")])
-
-```
-    file = request.files["image"]
-    image = Image.open(file.stream).convert("RGB")
-
-    query = extract_features(image)
-
-    scores = []
-    for pid, feat in image_features.items():
-        sim = cosine_similarity([query], [feat])[0][0]
-        scores.append((pid, sim))
-
-    scores.sort(key=lambda x: x[1], reverse=True)
-
-    return jsonify([pid for pid, _ in scores[:5]])
-
+# basic fallback (no ML)
+ids = [str(p["id"]) for p in df.head(5).to_dict("records")]
+return jsonify(ids)
 except Exception as e:
-    print("Error:", e)
-    return jsonify({"error": "failed"}), 500
-```
+print("Error:", e)
+return jsonify({"error": "failed"}), 500
 
 # ---------------- HEALTH ----------------
 
@@ -200,12 +115,10 @@ return jsonify({"status": "running"})
 @app.route("/health")
 def health():
 return jsonify({
-"products": len(df),
-"images": len(image_features),
-"image_model": MODEL_AVAILABLE
+"products": len(df)
 })
 
-# ---------------- RUN ----------------
+# ---------------- Run ----------------
 
 if **name** == "**main**":
 port = int(os.environ.get("PORT", 5000))
