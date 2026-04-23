@@ -36,7 +36,7 @@ cosine_sim = None
 indices = {}
 image_features = {}
 
-# ---------------- Load Data (LIMITED FAST) ---------------- #
+# ---------------- Load Data ---------------- #
 def load_products():
     url = f"{SUPABASE_URL}/rest/v1/products?select=id,name,brand,category,description,price,image&limit=100"
     
@@ -47,12 +47,12 @@ def load_products():
         return pd.DataFrame()
 
     data = res.json()
-    print(f"✅ Loaded {len(data)} products (LIMITED)")
+    print(f"✅ Loaded {len(data)} products")
     return pd.DataFrame(data)
 
 # ---------------- Image Feature ---------------- #
 def simple_image_features(img):
-    img = img.resize((32, 32))  # 🔥 smaller = faster
+    img = img.resize((32, 32))
     arr = np.array(img)
     return arr.flatten() / 255.0
 
@@ -74,7 +74,6 @@ def rebuild_model():
 
     df = load_products()
     if df.empty:
-        print("❌ No products loaded")
         return False
 
     for col in ["name", "brand", "category", "description"]:
@@ -88,7 +87,7 @@ def rebuild_model():
 
     indices = pd.Series(df.index, index=df["id"].astype(str)).drop_duplicates()
 
-    # -------- IMAGE FEATURES (FAST LOAD) -------- #
+    # -------- IMAGE FEATURES -------- #
     image_features = {}
 
     for _, row in df.iterrows():
@@ -110,10 +109,9 @@ def rebuild_model():
         except:
             image_features[pid] = np.zeros(32*32*3)
 
-    print("🖼️ Image features ready (FAST)")
+    print("🖼️ Image features ready")
     return True
 
-# Initial load
 rebuild_model()
 
 # ---------------- Routes ---------------- #
@@ -130,7 +128,7 @@ def recommend():
     product_id = str(request.json.get("product_id", ""))
     return jsonify(cached_recommend(product_id))
 
-# -------- IMAGE SEARCH (IMPROVED) -------- #
+# -------- IMAGE SEARCH (SMART + ACCURATE) -------- #
 @app.route("/image-search", methods=["POST"])
 def image_search():
     file = request.files.get("image")
@@ -144,7 +142,7 @@ def image_search():
 
         scores = []
 
-        # 🔥 RANDOM SAMPLE (FASTER)
+        # 🔥 sample for speed
         items = list(image_features.items())
         items = random.sample(items, min(50, len(items)))
 
@@ -152,18 +150,37 @@ def image_search():
             if np.linalg.norm(feat) == 0:
                 continue
 
-            sim = np.dot(query_feat, feat) / (
+            # -------- IMAGE SIM -------- #
+            img_sim = np.dot(query_feat, feat) / (
                 np.linalg.norm(query_feat) * np.linalg.norm(feat) + 1e-8
             )
 
-            scores.append((pid, sim))
+            # -------- TEXT / CATEGORY BOOST -------- #
+            row = df[df["id"] == pid].iloc[0]
+
+            name = row["name"].lower()
+            category = row["category"].lower()
+
+            score = img_sim
+
+            # 🔥 SMART BOOSTING (KEY FIX)
+            if any(word in name for word in ["phone", "mobile", "smartphone"]):
+                score += 0.3
+
+            if any(word in name for word in ["headphone", "earphone", "earbuds"]):
+                score -= 0.25
+
+            if any(word in name for word in ["charger", "cable"]):
+                score -= 0.2
+
+            scores.append((pid, score))
 
         if len(scores) == 0:
             return jsonify(df["id"].astype(str).head(TOP_N).tolist())
 
-        # 🔥 SORT + RANDOM MIX
         scores.sort(key=lambda x: x[1], reverse=True)
 
+        # 🔥 diversity
         top_candidates = scores[:20]
         random.shuffle(top_candidates)
 
@@ -171,7 +188,8 @@ def image_search():
 
         return jsonify(result)
 
-    except:
+    except Exception as e:
+        print("❌ Error:", e)
         return jsonify(df["id"].astype(str).head(TOP_N).tolist())
 
 @app.route("/reload", methods=["POST"])
