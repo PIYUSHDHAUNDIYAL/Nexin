@@ -16,8 +16,6 @@ from io import BytesIO
 load_dotenv()
 
 app = Flask(__name__)
-
-# 🔥 FIXED CORS (IMPORTANT)
 CORS(app, supports_credentials=True)
 
 TOP_N = 5
@@ -27,7 +25,7 @@ SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
-    "Authorization": f"Bearer {SUPABASE_KEY}",
+    "Authorization": f"Bearer {SUPABASE_KEY},
     "Content-Type": "application/json"
 }
 
@@ -35,7 +33,9 @@ HEADERS = {
 df = pd.DataFrame()
 cosine_sim = None
 indices = {}
-image_features = {}
+
+# 🔥 CACHE image features (lazy)
+image_features_cache = {}
 
 # ---------------- Load Data ---------------- #
 def load_products():
@@ -56,6 +56,24 @@ def simple_image_features(img):
     arr = np.array(img)
     return arr.flatten() / 255.0
 
+# 🔥 Lazy loader
+def get_image_features(pid, img_url):
+    if pid in image_features_cache:
+        return image_features_cache[pid]
+
+    try:
+        if img_url:
+            res = requests.get(img_url, timeout=3)
+            img = Image.open(BytesIO(res.content)).convert("RGB")
+            feat = simple_image_features(img)
+        else:
+            feat = np.zeros(64*64*3)
+    except:
+        feat = np.zeros(64*64*3)
+
+    image_features_cache[pid] = feat
+    return feat
+
 # ---------------- Recommendation ---------------- #
 @lru_cache(maxsize=5000)
 def cached_recommend(product_id: str):
@@ -70,7 +88,7 @@ def cached_recommend(product_id: str):
 
 # ---------------- Build Model ---------------- #
 def rebuild_model():
-    global df, cosine_sim, indices, image_features
+    global df, cosine_sim, indices
 
     df = load_products()
     if df.empty:
@@ -88,28 +106,10 @@ def rebuild_model():
 
     indices = pd.Series(df.index, index=df["id"].astype(str)).drop_duplicates()
 
-    # -------- IMAGE FEATURES -------- #
-    image_features = {}
-
-    for _, row in df.iterrows():
-        pid = str(row["id"])
-        img_url = row.get("image")
-
-        try:
-            if img_url:
-                res = requests.get(img_url, timeout=5)
-                img = Image.open(BytesIO(res.content)).convert("RGB")
-                image_features[pid] = simple_image_features(img)
-            else:
-                image_features[pid] = np.zeros(64*64*3)
-        except Exception as e:
-            print("❌ Image load failed:", e)
-            image_features[pid] = np.zeros(64*64*3)
-
-    print("🖼️ Image features ready")
+    print("✅ Model ready (FAST startup)")
     return True
 
-# Initial load
+# Initial load (FAST now)
 rebuild_model()
 
 # ---------------- Routes ---------------- #
@@ -126,10 +126,10 @@ def recommend():
     product_id = str(request.json.get("product_id", ""))
     return jsonify(cached_recommend(product_id))
 
-# -------- IMAGE SEARCH -------- #
+# -------- IMAGE SEARCH (OPTIMIZED) -------- #
 @app.route("/image-search", methods=["POST"])
 def image_search():
-    print("📸 Image search request received")
+    print("📸 Image search request")
 
     file = request.files.get("image")
     if not file:
@@ -141,18 +141,24 @@ def image_search():
 
         scores = []
 
-        for pid, feat in image_features.items():
+        # 🔥 ONLY LOOP (no preload)
+        for _, row in df.iterrows():
+            pid = str(row["id"])
+            img_url = row.get("image")
+
+            feat = get_image_features(pid, img_url)
+
             if np.linalg.norm(feat) == 0:
                 continue
 
             sim = np.dot(query_feat, feat) / (
                 np.linalg.norm(query_feat) * np.linalg.norm(feat) + 1e-8
             )
+
             scores.append((pid, sim))
 
-        # 🔥 FALLBACK FIX
         if len(scores) == 0:
-            print("⚠️ No matches → fallback")
+            print("⚠️ Fallback triggered")
             return jsonify(df["id"].astype(str).head(TOP_N).tolist())
 
         scores.sort(key=lambda x: x[1], reverse=True)
@@ -171,5 +177,5 @@ def reload():
 
 # ---------------- Run ---------------- #
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # 🔥 Render fix
+    port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
