@@ -7,6 +7,7 @@ from functools import lru_cache
 import os
 import requests
 from dotenv import load_dotenv
+import random
 
 from PIL import Image
 import numpy as np
@@ -35,7 +36,7 @@ cosine_sim = None
 indices = {}
 image_features = {}
 
-# ---------------- Load Data (LIMITED) ---------------- #
+# ---------------- Load Data (LIMITED FAST) ---------------- #
 def load_products():
     url = f"{SUPABASE_URL}/rest/v1/products?select=id,name,brand,category,description,price,image&limit=100"
     
@@ -51,7 +52,7 @@ def load_products():
 
 # ---------------- Image Feature ---------------- #
 def simple_image_features(img):
-    img = img.resize((64, 64))
+    img = img.resize((32, 32))  # 🔥 smaller = faster
     arr = np.array(img)
     return arr.flatten() / 255.0
 
@@ -67,7 +68,7 @@ def cached_recommend(product_id: str):
 
     return df.loc[[i[0] for i in scores], "id"].astype(str).tolist()
 
-# ---------------- Build Model (FAST) ---------------- #
+# ---------------- Build Model ---------------- #
 def rebuild_model():
     global df, cosine_sim, indices, image_features
 
@@ -96,19 +97,18 @@ def rebuild_model():
 
         try:
             if img_url:
-                # 🔥 reduced timeout
                 res = requests.get(img_url, timeout=2)
 
                 if res.status_code == 200:
                     img = Image.open(BytesIO(res.content)).convert("RGB")
                     image_features[pid] = simple_image_features(img)
                 else:
-                    image_features[pid] = np.zeros(64*64*3)
+                    image_features[pid] = np.zeros(32*32*3)
             else:
-                image_features[pid] = np.zeros(64*64*3)
+                image_features[pid] = np.zeros(32*32*3)
 
         except:
-            image_features[pid] = np.zeros(64*64*3)
+            image_features[pid] = np.zeros(32*32*3)
 
     print("🖼️ Image features ready (FAST)")
     return True
@@ -130,7 +130,7 @@ def recommend():
     product_id = str(request.json.get("product_id", ""))
     return jsonify(cached_recommend(product_id))
 
-# -------- IMAGE SEARCH -------- #
+# -------- IMAGE SEARCH (IMPROVED) -------- #
 @app.route("/image-search", methods=["POST"])
 def image_search():
     file = request.files.get("image")
@@ -144,7 +144,11 @@ def image_search():
 
         scores = []
 
-        for pid, feat in image_features.items():
+        # 🔥 RANDOM SAMPLE (FASTER)
+        items = list(image_features.items())
+        items = random.sample(items, min(50, len(items)))
+
+        for pid, feat in items:
             if np.linalg.norm(feat) == 0:
                 continue
 
@@ -157,9 +161,14 @@ def image_search():
         if len(scores) == 0:
             return jsonify(df["id"].astype(str).head(TOP_N).tolist())
 
+        # 🔥 SORT + RANDOM MIX
         scores.sort(key=lambda x: x[1], reverse=True)
 
-        result = [pid for pid, _ in scores[:TOP_N]]
+        top_candidates = scores[:20]
+        random.shuffle(top_candidates)
+
+        result = [pid for pid, _ in top_candidates[:TOP_N]]
+
         return jsonify(result)
 
     except:
