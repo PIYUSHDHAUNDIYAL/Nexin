@@ -25,7 +25,7 @@ SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
-    "Authorization": f"Bearer {SUPABASE_KEY},
+    "Authorization": f"Bearer {SUPABASE_KEY}",
     "Content-Type": "application/json"
 }
 
@@ -33,21 +33,20 @@ HEADERS = {
 df = pd.DataFrame()
 cosine_sim = None
 indices = {}
+image_features = {}
 
-# 🔥 CACHE image features (lazy)
-image_features_cache = {}
-
-# ---------------- Load Data ---------------- #
+# ---------------- Load Data (LIMITED) ---------------- #
 def load_products():
-    url = f"{SUPABASE_URL}/rest/v1/products?select=id,name,brand,category,description,price,image"
-    res = requests.get(url, headers=HEADERS, timeout=30)
+    url = f"{SUPABASE_URL}/rest/v1/products?select=id,name,brand,category,description,price,image&limit=100"
+    
+    res = requests.get(url, headers=HEADERS, timeout=10)
 
     if res.status_code != 200:
         print("❌ Supabase fetch failed:", res.text)
         return pd.DataFrame()
 
     data = res.json()
-    print(f"✅ Loaded {len(data)} products")
+    print(f"✅ Loaded {len(data)} products (LIMITED)")
     return pd.DataFrame(data)
 
 # ---------------- Image Feature ---------------- #
@@ -55,24 +54,6 @@ def simple_image_features(img):
     img = img.resize((64, 64))
     arr = np.array(img)
     return arr.flatten() / 255.0
-
-# 🔥 Lazy loader
-def get_image_features(pid, img_url):
-    if pid in image_features_cache:
-        return image_features_cache[pid]
-
-    try:
-        if img_url:
-            res = requests.get(img_url, timeout=3)
-            img = Image.open(BytesIO(res.content)).convert("RGB")
-            feat = simple_image_features(img)
-        else:
-            feat = np.zeros(64*64*3)
-    except:
-        feat = np.zeros(64*64*3)
-
-    image_features_cache[pid] = feat
-    return feat
 
 # ---------------- Recommendation ---------------- #
 @lru_cache(maxsize=5000)
@@ -86,9 +67,9 @@ def cached_recommend(product_id: str):
 
     return df.loc[[i[0] for i in scores], "id"].astype(str).tolist()
 
-# ---------------- Build Model ---------------- #
+# ---------------- Build Model (FAST) ---------------- #
 def rebuild_model():
-    global df, cosine_sim, indices
+    global df, cosine_sim, indices, image_features
 
     df = load_products()
     if df.empty:
@@ -106,10 +87,33 @@ def rebuild_model():
 
     indices = pd.Series(df.index, index=df["id"].astype(str)).drop_duplicates()
 
-    print("✅ Model ready (FAST startup)")
+    # -------- IMAGE FEATURES (FAST LOAD) -------- #
+    image_features = {}
+
+    for _, row in df.iterrows():
+        pid = str(row["id"])
+        img_url = row.get("image")
+
+        try:
+            if img_url:
+                # 🔥 reduced timeout
+                res = requests.get(img_url, timeout=2)
+
+                if res.status_code == 200:
+                    img = Image.open(BytesIO(res.content)).convert("RGB")
+                    image_features[pid] = simple_image_features(img)
+                else:
+                    image_features[pid] = np.zeros(64*64*3)
+            else:
+                image_features[pid] = np.zeros(64*64*3)
+
+        except:
+            image_features[pid] = np.zeros(64*64*3)
+
+    print("🖼️ Image features ready (FAST)")
     return True
 
-# Initial load (FAST now)
+# Initial load
 rebuild_model()
 
 # ---------------- Routes ---------------- #
@@ -126,12 +130,11 @@ def recommend():
     product_id = str(request.json.get("product_id", ""))
     return jsonify(cached_recommend(product_id))
 
-# -------- IMAGE SEARCH (OPTIMIZED) -------- #
+# -------- IMAGE SEARCH -------- #
 @app.route("/image-search", methods=["POST"])
 def image_search():
-    print("📸 Image search request")
-
     file = request.files.get("image")
+
     if not file:
         return jsonify({"error": "No image"}), 400
 
@@ -141,13 +144,7 @@ def image_search():
 
         scores = []
 
-        # 🔥 ONLY LOOP (no preload)
-        for _, row in df.iterrows():
-            pid = str(row["id"])
-            img_url = row.get("image")
-
-            feat = get_image_features(pid, img_url)
-
+        for pid, feat in image_features.items():
             if np.linalg.norm(feat) == 0:
                 continue
 
@@ -158,17 +155,14 @@ def image_search():
             scores.append((pid, sim))
 
         if len(scores) == 0:
-            print("⚠️ Fallback triggered")
             return jsonify(df["id"].astype(str).head(TOP_N).tolist())
 
         scores.sort(key=lambda x: x[1], reverse=True)
-        result = [pid for pid, _ in scores[:TOP_N]]
 
-        print("✅ Results:", result)
+        result = [pid for pid, _ in scores[:TOP_N]]
         return jsonify(result)
 
-    except Exception as e:
-        print("❌ Error:", e)
+    except:
         return jsonify(df["id"].astype(str).head(TOP_N).tolist())
 
 @app.route("/reload", methods=["POST"])
