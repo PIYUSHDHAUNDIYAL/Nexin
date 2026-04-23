@@ -16,18 +16,14 @@ from io import BytesIO
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": [
-    "https://nexin.vercel.app",
-    "https://nexin-seven.vercel.app"
-]}})
+
+# 🔥 FIXED CORS (IMPORTANT)
+CORS(app, supports_credentials=True)
 
 TOP_N = 5
-PRICE_RANGE = 0.30
-BRAND_BOOST = 0.05
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-ADMIN_RELOAD_TOKEN = os.getenv("ADMIN_RELOAD_TOKEN")
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -39,13 +35,16 @@ HEADERS = {
 df = pd.DataFrame()
 cosine_sim = None
 indices = {}
-max_price = 1
 image_features = {}
 
 # ---------------- Load Data ---------------- #
 def load_products():
     url = f"{SUPABASE_URL}/rest/v1/products?select=id,name,brand,category,description,price,image"
     res = requests.get(url, headers=HEADERS, timeout=30)
+
+    if res.status_code != 200:
+        print("❌ Supabase fetch failed:", res.text)
+        return pd.DataFrame()
 
     data = res.json()
     print(f"✅ Loaded {len(data)} products")
@@ -57,7 +56,7 @@ def simple_image_features(img):
     arr = np.array(img)
     return arr.flatten() / 255.0
 
-# ---------------- Cached Recommendation ---------------- #
+# ---------------- Recommendation ---------------- #
 @lru_cache(maxsize=5000)
 def cached_recommend(product_id: str):
     if product_id not in indices:
@@ -74,6 +73,9 @@ def rebuild_model():
     global df, cosine_sim, indices, image_features
 
     df = load_products()
+    if df.empty:
+        print("❌ No products loaded")
+        return False
 
     for col in ["name", "brand", "category", "description"]:
         df[col] = df[col].fillna("").astype(str)
@@ -94,22 +96,20 @@ def rebuild_model():
         img_url = row.get("image")
 
         try:
-            print("Fetching:", img_url)
-
             if img_url:
                 res = requests.get(img_url, timeout=5)
                 img = Image.open(BytesIO(res.content)).convert("RGB")
                 image_features[pid] = simple_image_features(img)
             else:
                 image_features[pid] = np.zeros(64*64*3)
-
         except Exception as e:
-            print("❌ Failed:", e)
+            print("❌ Image load failed:", e)
             image_features[pid] = np.zeros(64*64*3)
 
     print("🖼️ Image features ready")
     return True
 
+# Initial load
 rebuild_model()
 
 # ---------------- Routes ---------------- #
@@ -126,11 +126,12 @@ def recommend():
     product_id = str(request.json.get("product_id", ""))
     return jsonify(cached_recommend(product_id))
 
-# -------- FIXED IMAGE SEARCH -------- #
+# -------- IMAGE SEARCH -------- #
 @app.route("/image-search", methods=["POST"])
 def image_search():
-    file = request.files.get("image")
+    print("📸 Image search request received")
 
+    file = request.files.get("image")
     if not file:
         return jsonify({"error": "No image"}), 400
 
@@ -141,7 +142,6 @@ def image_search():
         scores = []
 
         for pid, feat in image_features.items():
-            # skip broken images
             if np.linalg.norm(feat) == 0:
                 continue
 
@@ -150,13 +150,12 @@ def image_search():
             )
             scores.append((pid, sim))
 
-        # 🔥 IMPORTANT FIX
+        # 🔥 FALLBACK FIX
         if len(scores) == 0:
             print("⚠️ No matches → fallback")
             return jsonify(df["id"].astype(str).head(TOP_N).tolist())
 
         scores.sort(key=lambda x: x[1], reverse=True)
-
         result = [pid for pid, _ in scores[:TOP_N]]
 
         print("✅ Results:", result)
@@ -172,4 +171,5 @@ def reload():
 
 # ---------------- Run ---------------- #
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 5000))  # 🔥 Render fix
+    app.run(host="0.0.0.0", port=port)
