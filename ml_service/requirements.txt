@@ -2,9 +2,8 @@ flask
 flask-cors
 pandas
 scikit-learn
-python-dotenv
-requests
-pillow
 numpy
-sentence-transformers
-torch
+requests
+python-dotenv
+gunicorn
+pillow
