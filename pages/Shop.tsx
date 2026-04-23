@@ -22,15 +22,12 @@ export const Shop: React.FC<ShopProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // NEW: image search results
   const [imageResults, setImageResults] = useState<string[] | null>(null);
 
-  /* ================= Sync search ================= */
   useEffect(() => {
     setSearch(searchQuery);
   }, [searchQuery]);
 
-  /* ================= Wishlist ================= */
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem('wishlist') || '[]');
     setWishlist(saved);
@@ -46,11 +43,11 @@ export const Shop: React.FC<ShopProps> = ({
     });
   };
 
-  /* ================= Load products ================= */
   useEffect(() => {
     const loadProducts = async () => {
       try {
         const data = await api.getProducts();
+        console.log("Products loaded:", data.map((p: any) => p.id)); // DEBUG
         setProducts(data);
       } catch {
         setError('Failed to load products.');
@@ -78,8 +75,16 @@ export const Shop: React.FC<ShopProps> = ({
       });
 
       const ids = await res.json();
-      setImageResults(ids); // store result ids
-    } catch {
+
+      console.log("IMAGE IDS:", ids); // DEBUG
+
+      // FIX: always convert to string
+      const cleanIds = ids.map((id: any) => String(id));
+
+      setImageResults(cleanIds);
+
+    } catch (err) {
+      console.error(err);
       alert("Image search failed");
     } finally {
       setLoading(false);
@@ -90,19 +95,28 @@ export const Shop: React.FC<ShopProps> = ({
     setImageResults(null);
   };
 
-  /* ================= Categories ================= */
   const categories = useMemo(() => {
     const unique = Array.from(new Set(products.map(p => p.category)));
     return ['All', ...unique];
   }, [products]);
 
-  /* ================= Filter + Sort ================= */
+  /* ================= FILTER ================= */
   const filteredProducts = useMemo(() => {
     let list = products;
 
-    // 🔥 PRIORITY: image search results
     if (imageResults) {
-      list = products.filter(p => imageResults.includes(p.id));
+      console.log("Filtering with image IDs:", imageResults);
+
+      list = products.filter(p =>
+        imageResults.includes(String(p.id)) // FIX HERE
+      );
+
+      // 🔥 fallback if nothing matches
+      if (list.length === 0) {
+        console.warn("No match found, showing fallback");
+        return products.slice(0, 8);
+      }
+
     } else {
       list = products.filter(p => {
         const matchCategory =
@@ -122,7 +136,6 @@ export const Shop: React.FC<ShopProps> = ({
     return list;
   }, [products, search, activeCategory, sortOrder, imageResults]);
 
-  /* ================= Skeleton ================= */
   const SkeletonCard = () => (
     <div className="animate-pulse bg-white rounded-2xl border p-4">
       <div className="h-40 bg-gray-200 rounded-lg mb-4" />
@@ -131,7 +144,6 @@ export const Shop: React.FC<ShopProps> = ({
     </div>
   );
 
-  /* ================= UI STATES ================= */
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center text-red-600">
@@ -143,7 +155,6 @@ export const Shop: React.FC<ShopProps> = ({
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
 
-      {/* ================= Header ================= */}
       <div className="mb-10">
         <h1 className="text-3xl font-bold text-gray-900">Shop</h1>
         <p className="text-gray-500 mt-1">
@@ -151,7 +162,6 @@ export const Shop: React.FC<ShopProps> = ({
         </p>
       </div>
 
-      {/* ================= Controls ================= */}
       <div className="sticky top-20 z-30 mb-8 bg-white/80 backdrop-blur rounded-xl p-4 border flex flex-wrap gap-3">
         
         <input
@@ -162,7 +172,6 @@ export const Shop: React.FC<ShopProps> = ({
           className="flex-1 px-4 py-2 border rounded-lg"
         />
 
-        {/* 🔥 NEW: Image Upload */}
         <input
           type="file"
           accept="image/*"
@@ -192,43 +201,35 @@ export const Shop: React.FC<ShopProps> = ({
         </select>
       </div>
 
-      {/* ================= Categories ================= */}
       <div className="mb-10 flex flex-wrap gap-2">
         {categories.map(category => (
           <button
             key={category}
             onClick={() => setActiveCategory(category)}
-            className={`
-              px-4 py-1.5 rounded-full text-sm font-medium
-              transition
-              ${
-                activeCategory === category
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }
-            `}
+            className={`px-4 py-1.5 rounded-full text-sm ${
+              activeCategory === category
+                ? 'bg-indigo-600 text-white'
+                : 'bg-gray-100'
+            }`}
           >
             {category}
           </button>
         ))}
       </div>
 
-      {/* ================= Product Grid ================= */}
       <section>
         <h2 className="text-xl font-semibold mb-4">
-          {imageResults ? "Image Search Results" : (activeCategory === 'All' ? 'All Products' : activeCategory)}
+          {imageResults ? "Image Search Results" : "All Products"}
         </h2>
 
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid grid-cols-4 gap-8">
             {Array.from({ length: 8 }).map((_, i) => (
               <SkeletonCard key={i} />
             ))}
           </div>
-        ) : filteredProducts.length === 0 ? (
-          <p className="text-gray-500">No products found.</p>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid grid-cols-4 gap-8">
             {filteredProducts.map(product => (
               <ProductCard
                 key={product.id}
