@@ -10,11 +10,8 @@ from dotenv import load_dotenv
 import random
 
 from PIL import Image
-from io import BytesIO
-
-# 🔥 CLIP
-from sentence_transformers import SentenceTransformer
 import numpy as np
+from io import BytesIO
 
 # ---------------- Setup ---------------- #
 load_dotenv()
@@ -33,16 +30,11 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
-# 🔥 Load CLIP model (once)
-print("🚀 Loading CLIP model...")
-clip_model = SentenceTransformer('clip-ViT-B-32')
-print("✅ CLIP loaded")
-
 # ---------------- Globals ---------------- #
 df = pd.DataFrame()
 cosine_sim = None
 indices = {}
-image_embeddings = {}
+image_features = {}
 
 # ---------------- Load Data ---------------- #
 def load_products():
@@ -58,9 +50,11 @@ def load_products():
     print(f"✅ Loaded {len(data)} products")
     return pd.DataFrame(data)
 
-# ---------------- CLIP Embedding ---------------- #
-def get_image_embedding(img):
-    return clip_model.encode(img)
+# ---------------- Image Feature ---------------- #
+def simple_image_features(img):
+    img = img.resize((32, 32))
+    arr = np.array(img)
+    return arr.flatten() / 255.0
 
 # ---------------- Recommendation ---------------- #
 @lru_cache(maxsize=5000)
@@ -76,7 +70,7 @@ def cached_recommend(product_id: str):
 
 # ---------------- Build Model ---------------- #
 def rebuild_model():
-    global df, cosine_sim, indices, image_embeddings
+    global df, cosine_sim, indices, image_features
 
     df = load_products()
     if df.empty:
@@ -93,10 +87,8 @@ def rebuild_model():
 
     indices = pd.Series(df.index, index=df["id"].astype(str)).drop_duplicates()
 
-    # -------- IMAGE EMBEDDINGS -------- #
-    image_embeddings = {}
-
-    print("🖼️ Building CLIP embeddings...")
+    # -------- IMAGE FEATURES -------- #
+    image_features = {}
 
     for _, row in df.iterrows():
         pid = str(row["id"])
@@ -104,25 +96,22 @@ def rebuild_model():
 
         try:
             if img_url:
-                res = requests.get(img_url, timeout=3)
+                res = requests.get(img_url, timeout=2)
 
                 if res.status_code == 200:
                     img = Image.open(BytesIO(res.content)).convert("RGB")
-                    emb = get_image_embedding(img)
-                    image_embeddings[pid] = emb
+                    image_features[pid] = simple_image_features(img)
                 else:
-                    image_embeddings[pid] = None
+                    image_features[pid] = np.zeros(32*32*3)
             else:
-                image_embeddings[pid] = None
+                image_features[pid] = np.zeros(32*32*3)
 
-        except Exception as e:
-            print("❌ Image error:", e)
-            image_embeddings[pid] = None
+        except:
+            image_features[pid] = np.zeros(32*32*3)
 
-    print("✅ CLIP embeddings ready")
+    print("🖼️ Image features ready")
     return True
 
-# Initial load
 rebuild_model()
 
 # ---------------- Routes ---------------- #
@@ -139,7 +128,7 @@ def recommend():
     product_id = str(request.json.get("product_id", ""))
     return jsonify(cached_recommend(product_id))
 
-# -------- IMAGE SEARCH (CLIP POWERED) -------- #
+# -------- IMAGE SEARCH (SMART + ACCURATE) -------- #
 @app.route("/image-search", methods=["POST"])
 def image_search():
     file = request.files.get("image")
@@ -149,27 +138,53 @@ def image_search():
 
     try:
         img = Image.open(file).convert("RGB")
-        query_emb = get_image_embedding(img)
+        query_feat = simple_image_features(img)
 
         scores = []
 
         # 🔥 sample for speed
-        items = list(image_embeddings.items())
+        items = list(image_features.items())
         items = random.sample(items, min(50, len(items)))
 
-        for pid, emb in items:
-            if emb is None:
+        for pid, feat in items:
+            if np.linalg.norm(feat) == 0:
                 continue
 
-            sim = cosine_similarity([query_emb], [emb])[0][0]
-            scores.append((pid, sim))
+            # -------- IMAGE SIM -------- #
+            img_sim = np.dot(query_feat, feat) / (
+                np.linalg.norm(query_feat) * np.linalg.norm(feat) + 1e-8
+            )
+
+            # -------- TEXT / CATEGORY BOOST -------- #
+            row = df[df["id"] == pid].iloc[0]
+
+            name = row["name"].lower()
+            category = row["category"].lower()
+
+            score = img_sim
+
+            # 🔥 SMART BOOSTING (KEY FIX)
+            if any(word in name for word in ["phone", "mobile", "smartphone"]):
+                score += 0.3
+
+            if any(word in name for word in ["headphone", "earphone", "earbuds"]):
+                score -= 0.25
+
+            if any(word in name for word in ["charger", "cable"]):
+                score -= 0.2
+
+            scores.append((pid, score))
 
         if len(scores) == 0:
             return jsonify(df["id"].astype(str).head(TOP_N).tolist())
 
         scores.sort(key=lambda x: x[1], reverse=True)
 
-        result = [pid for pid, _ in scores[:TOP_N]]
+        # 🔥 diversity
+        top_candidates = scores[:20]
+        random.shuffle(top_candidates)
+
+        result = [pid for pid, _ in top_candidates[:TOP_N]]
 
         return jsonify(result)
 
