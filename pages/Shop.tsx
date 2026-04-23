@@ -22,6 +22,9 @@ export const Shop: React.FC<ShopProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // NEW: image search results
+  const [imageResults, setImageResults] = useState<string[] | null>(null);
+
   /* ================= Sync search ================= */
   useEffect(() => {
     setSearch(searchQuery);
@@ -58,6 +61,35 @@ export const Shop: React.FC<ShopProps> = ({
     loadProducts();
   }, []);
 
+  /* ================= IMAGE SEARCH ================= */
+  const handleImageUpload = async (e: any) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setLoading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const res = await fetch("https://nexin-kqyu.onrender.com/image-search", {
+        method: "POST",
+        body: formData
+      });
+
+      const ids = await res.json();
+      setImageResults(ids); // store result ids
+    } catch {
+      alert("Image search failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const clearImageSearch = () => {
+    setImageResults(null);
+  };
+
   /* ================= Categories ================= */
   const categories = useMemo(() => {
     const unique = Array.from(new Set(products.map(p => p.category)));
@@ -66,22 +98,29 @@ export const Shop: React.FC<ShopProps> = ({
 
   /* ================= Filter + Sort ================= */
   const filteredProducts = useMemo(() => {
-    let list = products.filter(p => {
-      const matchCategory =
-        activeCategory === 'All' || p.category === activeCategory;
+    let list = products;
 
-      const matchSearch =
-        p.name.toLowerCase().includes(search.toLowerCase()) ||
-        p.category.toLowerCase().includes(search.toLowerCase());
+    // 🔥 PRIORITY: image search results
+    if (imageResults) {
+      list = products.filter(p => imageResults.includes(p.id));
+    } else {
+      list = products.filter(p => {
+        const matchCategory =
+          activeCategory === 'All' || p.category === activeCategory;
 
-      return matchCategory && matchSearch;
-    });
+        const matchSearch =
+          p.name.toLowerCase().includes(search.toLowerCase()) ||
+          p.category.toLowerCase().includes(search.toLowerCase());
+
+        return matchCategory && matchSearch;
+      });
+    }
 
     if (sortOrder === 'low') list.sort((a, b) => a.price - b.price);
     if (sortOrder === 'high') list.sort((a, b) => b.price - a.price);
 
     return list;
-  }, [products, search, activeCategory, sortOrder]);
+  }, [products, search, activeCategory, sortOrder, imageResults]);
 
   /* ================= Skeleton ================= */
   const SkeletonCard = () => (
@@ -114,6 +153,7 @@ export const Shop: React.FC<ShopProps> = ({
 
       {/* ================= Controls ================= */}
       <div className="sticky top-20 z-30 mb-8 bg-white/80 backdrop-blur rounded-xl p-4 border flex flex-wrap gap-3">
+        
         <input
           type="text"
           placeholder="Search products..."
@@ -121,6 +161,23 @@ export const Shop: React.FC<ShopProps> = ({
           onChange={(e) => setSearch(e.target.value)}
           className="flex-1 px-4 py-2 border rounded-lg"
         />
+
+        {/* 🔥 NEW: Image Upload */}
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleImageUpload}
+          className="px-2 py-2 border rounded-lg"
+        />
+
+        {imageResults && (
+          <button
+            onClick={clearImageSearch}
+            className="px-3 py-2 bg-red-500 text-white rounded-lg"
+          >
+            Clear Image Search
+          </button>
+        )}
 
         <select
           value={sortOrder}
@@ -156,37 +213,10 @@ export const Shop: React.FC<ShopProps> = ({
         ))}
       </div>
 
-      {/* ================= Wishlist ================= */}
-      {wishlist.length > 0 && (
-        <section className="mb-16">
-          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-             Wishlist
-          </h2>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            {products
-              .filter(p => wishlist.includes(p.id))
-              .map(product => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  isWishlisted
-                  onToggleWishlist={toggleWishlist}
-                  onClick={(id) => onNavigate('product', id)}
-                  onAddToCart={(p, e) => {
-                    e.stopPropagation();
-                    onAddToCart(p);
-                  }}
-                />
-              ))}
-          </div>
-        </section>
-      )}
-
       {/* ================= Product Grid ================= */}
       <section>
         <h2 className="text-xl font-semibold mb-4">
-          {activeCategory === 'All' ? 'All Products' : activeCategory}
+          {imageResults ? "Image Search Results" : (activeCategory === 'All' ? 'All Products' : activeCategory)}
         </h2>
 
         {loading ? (
