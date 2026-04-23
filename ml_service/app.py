@@ -8,6 +8,11 @@ import os
 import requests
 from dotenv import load_dotenv
 
+# NEW IMPORTS (lightweight)
+from PIL import Image
+import numpy as np
+from io import BytesIO
+
 # ---------------- Setup ---------------- #
 load_dotenv()
 
@@ -48,9 +53,13 @@ cosine_sim = None
 indices = {}
 max_price = 1
 
+# NEW: image features store
+image_features = {}
+
 # ---------------- Load Data ---------------- #
 def load_products():
-    url = f"{SUPABASE_URL}/rest/v1/products?select=id,name,brand,category,description,price"
+    # IMPORTANT: added image_url
+    url = f"{SUPABASE_URL}/rest/v1/products?select=id,name,brand,category,description,price,image_url"
     res = requests.get(url, headers=HEADERS, timeout=30)
 
     if res.status_code != 200:
@@ -60,6 +69,12 @@ def load_products():
     data = res.json()
     print(f"✅ Loaded {len(data)} products from Supabase")
     return pd.DataFrame(data)
+
+# ---------------- Simple Image Features ---------------- #
+def simple_image_features(img):
+    img = img.resize((64, 64))
+    arr = np.array(img)
+    return arr.flatten() / 255.0
 
 # ---------------- Cached Recommendation ---------------- #
 @lru_cache(maxsize=5000)
@@ -109,7 +124,7 @@ def cached_recommend(product_id: str):
 
 # ---------------- Build / Rebuild Model ---------------- #
 def rebuild_model():
-    global df, tfidf_matrix, cosine_sim, indices, max_price
+    global df, tfidf_matrix, cosine_sim, indices, max_price, image_features
 
     df = load_products()
     if df.empty:
@@ -136,11 +151,30 @@ def rebuild_model():
     indices = pd.Series(df.index, index=df["id"].astype(str)).drop_duplicates()
     max_price = df["price"].max() if df["price"].max() > 0 else 1
 
+    # -------- NEW: IMAGE FEATURES -------- #
+    image_features = {}
+
+    for _, row in df.iterrows():
+        pid = str(row["id"])
+        img_url = row.get("image_url")
+
+        try:
+            if img_url:
+                res = requests.get(img_url, timeout=5)
+                img = Image.open(BytesIO(res.content)).convert("RGB")
+                image_features[pid] = simple_image_features(img)
+            else:
+                image_features[pid] = np.zeros(64*64*3)
+        except:
+            image_features[pid] = np.zeros(64*64*3)
+
+    print("🖼️ Image features ready")
+
     cached_recommend.cache_clear()
     print("♻️ ML model rebuilt & cache cleared")
     return True
 
-# Initial load (safe now)
+# Initial load
 rebuild_model()
 
 # ---------------- Routes ---------------- #
@@ -163,6 +197,35 @@ def recommend():
     payload = request.get_json(force=True)
     product_id = str(payload.get("product_id", ""))
     return jsonify(cached_recommend(product_id))
+
+# -------- NEW: IMAGE SEARCH -------- #
+@app.route("/image-search", methods=["POST"])
+def image_search():
+    file = request.files.get("image")
+
+    if not file:
+        return jsonify({"error": "No image uploaded"}), 400
+
+    try:
+        img = Image.open(file).convert("RGB")
+        query_feat = simple_image_features(img)
+
+        scores = []
+
+        for pid, feat in image_features.items():
+            sim = np.dot(query_feat, feat) / (
+                np.linalg.norm(query_feat) * np.linalg.norm(feat) + 1e-8
+            )
+            scores.append((pid, sim))
+
+        scores.sort(key=lambda x: x[1], reverse=True)
+
+        top_ids = [pid for pid, _ in scores[:TOP_N]]
+
+        return jsonify(top_ids)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/reload", methods=["POST"])
 def reload_model():
