@@ -7,7 +7,6 @@ from functools import lru_cache
 import os
 import requests
 from dotenv import load_dotenv
-import random
 import base64
 
 # ---------------- Setup ---------------- #
@@ -71,7 +70,11 @@ def get_clip_score(image_bytes, text):
 
         result = response.json()
 
-        return result[0]["score"]
+        # ✅ SAFE PARSING
+        if isinstance(result, list) and len(result) > 0:
+            return result[0].get("score", 0)
+        else:
+            return 0
 
     except Exception as e:
         print("HF Exception:", e)
@@ -127,7 +130,7 @@ def recommend():
     product_id = str(request.json.get("product_id", ""))
     return jsonify(cached_recommend(product_id))
 
-# -------- IMAGE SEARCH (CLIP POWERED) -------- #
+# ---------------- IMAGE SEARCH ---------------- #
 @app.route("/image-search", methods=["POST"])
 def image_search():
     file = request.files.get("image")
@@ -137,33 +140,61 @@ def image_search():
 
     image_bytes = file.read()
 
-    scores = []
+    try:
+        scores = []
 
-    # 🔥 SPEED OPTIMIZATION
-    sample_df = df.sample(min(20, len(df)))
+        # 🔥 Bigger sample = better accuracy
+        sample_df = df.sample(min(80, len(df)))
 
-    for _, row in sample_df.iterrows():
-        pid = str(row["id"])
+        for _, row in sample_df.iterrows():
+            pid = str(row["id"])
 
-        # 🔥 CLIP works best with text
-        text = f"{row['name']} {row['category']}"
+            # 🔥 Strong prompt (VERY IMPORTANT)
+            text = f"""
+            Product: {row['name']}
+            Category: {row['category']}
+            Description: {row['description']}
+            Type: electronic product
+            """
 
-        score = get_clip_score(image_bytes, text)
+            clip_score = get_clip_score(image_bytes, text)
 
-        scores.append((pid, score))
+            # 🔥 Keyword boost (improves precision)
+            text_all = f"{row['name']} {row['category']} {row['description']}".lower()
+            keyword_score = 0
 
-    if not scores:
+            if any(word in text_all for word in ["phone", "mobile", "smartphone"]):
+                keyword_score += 0.2
+
+            if any(word in text_all for word in ["headphone", "earbud", "earphone"]):
+                keyword_score += 0.2
+
+            if any(word in text_all for word in ["charger", "cable", "usb"]):
+                keyword_score += 0.2
+
+            # 🔥 Final score
+            final_score = 0.8 * clip_score + 0.2 * keyword_score
+
+            scores.append((pid, final_score))
+
+        # 🔥 Sort
+        scores.sort(key=lambda x: x[1], reverse=True)
+
+        # 🔥 Remove weak matches
+        filtered = [x for x in scores if x[1] > 0.15]
+
+        if not filtered:
+            return jsonify(df["id"].astype(str).head(TOP_N).tolist())
+
+        result = [pid for pid, _ in filtered[:TOP_N]]
+
+        print("✅ FINAL RESULTS:", result)
+
+        return jsonify(result)
+
+    except Exception as e:
+        print("❌ Error:", e)
         return jsonify(df["id"].astype(str).head(TOP_N).tolist())
-
-    scores.sort(key=lambda x: x[1], reverse=True)
-
-    result = [pid for pid, _ in scores[:TOP_N]]
-
-    return jsonify(result)
-
-@app.route("/reload", methods=["POST"])
-def reload():
-    return {"reloaded": rebuild_model()}
 
 # ---------------- Run ---------------- #
 if __name__ == "__main__":
