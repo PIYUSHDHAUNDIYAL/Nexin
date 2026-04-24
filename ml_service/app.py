@@ -41,7 +41,7 @@ model_ready = False
 # ---------------- Load Data ---------------- #
 def load_products():
     url = f"{SUPABASE_URL}/rest/v1/products?select=id,name,brand,category,description,price,image&limit=100"
-    
+
     res = requests.get(url, headers=HEADERS, timeout=10)
 
     if res.status_code != 200:
@@ -62,10 +62,9 @@ def get_clip_score(image_bytes, text):
     }
 
     try:
-        res = requests.post(HF_API_URL, headers=HF_HEADERS, json=payload, timeout=8)
+        res = requests.post(HF_API_URL, headers=HF_HEADERS, json=payload, timeout=6)
 
         if res.status_code != 200:
-            print("HF Error:", res.text)
             return 0
 
         result = res.json()
@@ -75,8 +74,7 @@ def get_clip_score(image_bytes, text):
 
         return 0
 
-    except Exception as e:
-        print("HF Exception:", e)
+    except:
         return 0
 
 # ---------------- Build Model ---------------- #
@@ -136,7 +134,7 @@ def recommend():
     product_id = str(request.json.get("product_id", ""))
     return jsonify(cached_recommend(product_id))
 
-# ---------------- IMAGE SEARCH ---------------- #
+# ---------------- IMAGE SEARCH (FINAL FIXED) ---------------- #
 @app.route("/image-search", methods=["POST"])
 def image_search():
     ensure_model()
@@ -150,60 +148,55 @@ def image_search():
     try:
         scores = []
 
-        # 🔥 CATEGORY FILTER (VERY IMPORTANT)
-        electronics_df = df[df["category"].str.lower().str.contains("electronic")]
-
-        if electronics_df.empty:
-            electronics_df = df
-
-        # 🔥 LIMIT (FAST + BETTER)
-        sample_df = electronics_df.head(50)
+        # 🔥 STEP 1: LIMIT + SHUFFLE (IMPORTANT FIX)
+        sample_df = df.sample(min(40, len(df)))
 
         for _, row in sample_df.iterrows():
             pid = str(row["id"])
 
-            # 🔥 STRONG PROMPT
-            text = f"This is a {row['category']} product called {row['name']}. {row['description']}"
+            text = f"{row['name']} {row['category']}"
 
             clip_score = get_clip_score(image_bytes, text)
 
-            # 🔥 KEYWORD BOOST
-            text_lower = text.lower()
+            # 🔥 STEP 2: TEXT BOOST (VERY IMPORTANT)
+            soup = f"{row['name']} {row['category']} {row['description']}".lower()
+
             keyword_score = 0
 
-            if "phone" in text_lower or "mobile" in text_lower:
-                keyword_score += 0.3
-            if "charger" in text_lower:
-                keyword_score += 0.1
-            if "earphone" in text_lower or "headphone" in text_lower:
-                keyword_score += 0.1
+            if "phone" in soup or "mobile" in soup:
+                keyword_score += 0.4
+            if "charger" in soup:
+                keyword_score += 0.2
+            if "earphone" in soup or "headphone" in soup:
+                keyword_score += 0.2
 
             final_score = 0.7 * clip_score + 0.3 * keyword_score
 
             scores.append((pid, final_score))
 
-        # 🔥 SORT
+        # 🔥 STEP 3: SORT
         scores.sort(key=lambda x: x[1], reverse=True)
 
-        # 🔥 FILTER WEAK
-        scores = [x for x in scores if x[1] > 0.2]
+        # 🔥 STEP 4: REMOVE WEAK MATCHES
+        scores = [x for x in scores if x[1] > 0.15]
 
         if not scores:
-            return jsonify(df["id"].astype(str).head(TOP_N).tolist())
+            return jsonify(df["id"].astype(str).sample(TOP_N).tolist())
 
-        # 🔥 DIVERSITY FIX (NO REPEAT TYPE)
+        # 🔥 STEP 5: REMOVE DUPLICATES
         seen = set()
-        final = []
+        unique_results = []
 
         for pid, score in scores:
-            brand = df[df["id"] == pid]["brand"].values[0]
+            if pid not in seen:
+                unique_results.append(pid)
+                seen.add(pid)
 
-            if brand not in seen:
-                final.append(pid)
-                seen.add(brand)
-
-            if len(final) == TOP_N:
+            if len(unique_results) >= TOP_N * 2:
                 break
+
+        # 🔥 STEP 6: FINAL TOP N
+        final = unique_results[:TOP_N]
 
         print("✅ FINAL RESULTS:", final)
 
@@ -211,4 +204,16 @@ def image_search():
 
     except Exception as e:
         print("❌ Error:", e)
-        return jsonify(df["id"].astype(str).head(TOP_N).tolist())
+        return jsonify(df["id"].astype(str).sample(TOP_N).tolist())
+
+# ---------------- Reload ---------------- #
+@app.route("/reload", methods=["POST"])
+def reload():
+    global model_ready
+    model_ready = False
+    return {"reloaded": True}
+
+# ---------------- Run ---------------- #
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))  # 🔥 FIXED PORT FOR RENDER
+    app.run(host="0.0.0.0", port=port)
