@@ -8,10 +8,7 @@ import os
 import requests
 from dotenv import load_dotenv
 import random
-
-from PIL import Image
-import numpy as np
-from io import BytesIO
+import base64
 
 # ---------------- Setup ---------------- #
 load_dotenv()
@@ -23,6 +20,7 @@ TOP_N = 5
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+HF_API_KEY = os.getenv("HF_API_KEY")
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -30,11 +28,16 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
+# 🔥 HuggingFace CLIP API
+HF_API_URL = "https://api-inference.huggingface.co/models/openai/clip-vit-base-patch32"
+HF_HEADERS = {
+    "Authorization": f"Bearer {HF_API_KEY}"
+}
+
 # ---------------- Globals ---------------- #
 df = pd.DataFrame()
 cosine_sim = None
 indices = {}
-image_features = {}
 
 # ---------------- Load Data ---------------- #
 def load_products():
@@ -50,11 +53,29 @@ def load_products():
     print(f"✅ Loaded {len(data)} products")
     return pd.DataFrame(data)
 
-# ---------------- Image Feature ---------------- #
-def simple_image_features(img):
-    img = img.resize((32, 32))
-    arr = np.array(img)
-    return arr.flatten() / 255.0
+# ---------------- CLIP SCORE ---------------- #
+def get_clip_score(image_bytes, text):
+    payload = {
+        "inputs": {
+            "image": base64.b64encode(image_bytes).decode("utf-8"),
+            "text": text
+        }
+    }
+
+    try:
+        response = requests.post(HF_API_URL, headers=HF_HEADERS, json=payload, timeout=10)
+
+        if response.status_code != 200:
+            print("HF Error:", response.text)
+            return 0
+
+        result = response.json()
+
+        return result[0]["score"]
+
+    except Exception as e:
+        print("HF Exception:", e)
+        return 0
 
 # ---------------- Recommendation ---------------- #
 @lru_cache(maxsize=5000)
@@ -70,7 +91,7 @@ def cached_recommend(product_id: str):
 
 # ---------------- Build Model ---------------- #
 def rebuild_model():
-    global df, cosine_sim, indices, image_features
+    global df, cosine_sim, indices
 
     df = load_products()
     if df.empty:
@@ -87,29 +108,7 @@ def rebuild_model():
 
     indices = pd.Series(df.index, index=df["id"].astype(str)).drop_duplicates()
 
-    # -------- IMAGE FEATURES -------- #
-    image_features = {}
-
-    for _, row in df.iterrows():
-        pid = str(row["id"])
-        img_url = row.get("image")
-
-        try:
-            if img_url:
-                res = requests.get(img_url, timeout=2)
-
-                if res.status_code == 200:
-                    img = Image.open(BytesIO(res.content)).convert("RGB")
-                    image_features[pid] = simple_image_features(img)
-                else:
-                    image_features[pid] = np.zeros(32*32*3)
-            else:
-                image_features[pid] = np.zeros(32*32*3)
-
-        except:
-            image_features[pid] = np.zeros(32*32*3)
-
-    print("🖼️ Image features ready")
+    print("✅ Model ready")
     return True
 
 rebuild_model()
@@ -128,7 +127,7 @@ def recommend():
     product_id = str(request.json.get("product_id", ""))
     return jsonify(cached_recommend(product_id))
 
-# -------- IMAGE SEARCH (SMART + ACCURATE) -------- #
+# -------- IMAGE SEARCH (CLIP POWERED) -------- #
 @app.route("/image-search", methods=["POST"])
 def image_search():
     file = request.files.get("image")
@@ -136,61 +135,31 @@ def image_search():
     if not file:
         return jsonify({"error": "No image"}), 400
 
-    try:
-        img = Image.open(file).convert("RGB")
-        query_feat = simple_image_features(img)
+    image_bytes = file.read()
 
-        scores = []
+    scores = []
 
-        # 🔥 sample for speed
-        items = list(image_features.items())
-        items = random.sample(items, min(50, len(items)))
+    # 🔥 SPEED OPTIMIZATION
+    sample_df = df.sample(min(20, len(df)))
 
-        for pid, feat in items:
-            if np.linalg.norm(feat) == 0:
-                continue
+    for _, row in sample_df.iterrows():
+        pid = str(row["id"])
 
-            # -------- IMAGE SIM -------- #
-            img_sim = np.dot(query_feat, feat) / (
-                np.linalg.norm(query_feat) * np.linalg.norm(feat) + 1e-8
-            )
+        # 🔥 CLIP works best with text
+        text = f"{row['name']} {row['category']}"
 
-            # -------- TEXT / CATEGORY BOOST -------- #
-            row = df[df["id"] == pid].iloc[0]
+        score = get_clip_score(image_bytes, text)
 
-            name = row["name"].lower()
-            category = row["category"].lower()
+        scores.append((pid, score))
 
-            score = img_sim
-
-            # 🔥 SMART BOOSTING (KEY FIX)
-            if any(word in name for word in ["phone", "mobile", "smartphone"]):
-                score += 0.3
-
-            if any(word in name for word in ["headphone", "earphone", "earbuds"]):
-                score -= 0.25
-
-            if any(word in name for word in ["charger", "cable"]):
-                score -= 0.2
-
-            scores.append((pid, score))
-
-        if len(scores) == 0:
-            return jsonify(df["id"].astype(str).head(TOP_N).tolist())
-
-        scores.sort(key=lambda x: x[1], reverse=True)
-
-        # 🔥 diversity
-        top_candidates = scores[:20]
-        random.shuffle(top_candidates)
-
-        result = [pid for pid, _ in top_candidates[:TOP_N]]
-
-        return jsonify(result)
-
-    except Exception as e:
-        print("❌ Error:", e)
+    if not scores:
         return jsonify(df["id"].astype(str).head(TOP_N).tolist())
+
+    scores.sort(key=lambda x: x[1], reverse=True)
+
+    result = [pid for pid, _ in scores[:TOP_N]]
+
+    return jsonify(result)
 
 @app.route("/reload", methods=["POST"])
 def reload():
