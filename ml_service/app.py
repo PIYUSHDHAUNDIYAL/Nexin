@@ -27,7 +27,6 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
-# 🔥 HuggingFace CLIP API
 HF_API_URL = "https://api-inference.huggingface.co/models/openai/clip-vit-base-patch32"
 HF_HEADERS = {
     "Authorization": f"Bearer {HF_API_KEY}"
@@ -37,6 +36,7 @@ HF_HEADERS = {
 df = pd.DataFrame()
 cosine_sim = None
 indices = {}
+model_ready = False
 
 # ---------------- Load Data ---------------- #
 def load_products():
@@ -62,7 +62,7 @@ def get_clip_score(image_bytes, text):
     }
 
     try:
-        response = requests.post(HF_API_URL, headers=HF_HEADERS, json=payload, timeout=10)
+        response = requests.post(HF_API_URL, headers=HF_HEADERS, json=payload, timeout=8)
 
         if response.status_code != 200:
             print("HF Error:", response.text)
@@ -70,27 +70,14 @@ def get_clip_score(image_bytes, text):
 
         result = response.json()
 
-        # ✅ SAFE PARSING
         if isinstance(result, list) and len(result) > 0:
             return result[0].get("score", 0)
-        else:
-            return 0
+
+        return 0
 
     except Exception as e:
         print("HF Exception:", e)
         return 0
-
-# ---------------- Recommendation ---------------- #
-@lru_cache(maxsize=5000)
-def cached_recommend(product_id: str):
-    if product_id not in indices:
-        return []
-
-    idx = indices[product_id]
-    scores = list(enumerate(cosine_sim[idx]))
-    scores = sorted(scores, key=lambda x: x[1], reverse=True)[1:TOP_N+1]
-
-    return df.loc[[i[0] for i in scores], "id"].astype(str).tolist()
 
 # ---------------- Build Model ---------------- #
 def rebuild_model():
@@ -114,7 +101,25 @@ def rebuild_model():
     print("✅ Model ready")
     return True
 
-rebuild_model()
+# ---------------- Lazy Load ---------------- #
+def ensure_model():
+    global model_ready
+    if not model_ready:
+        print("⚡ Loading model lazily...")
+        rebuild_model()
+        model_ready = True
+
+# ---------------- Recommendation ---------------- #
+@lru_cache(maxsize=5000)
+def cached_recommend(product_id: str):
+    if product_id not in indices:
+        return []
+
+    idx = indices[product_id]
+    scores = list(enumerate(cosine_sim[idx]))
+    scores = sorted(scores, key=lambda x: x[1], reverse=True)[1:TOP_N+1]
+
+    return df.loc[[i[0] for i in scores], "id"].astype(str).tolist()
 
 # ---------------- Routes ---------------- #
 @app.route("/")
@@ -127,12 +132,15 @@ def health():
 
 @app.route("/recommend", methods=["POST"])
 def recommend():
+    ensure_model()
     product_id = str(request.json.get("product_id", ""))
     return jsonify(cached_recommend(product_id))
 
 # ---------------- IMAGE SEARCH ---------------- #
 @app.route("/image-search", methods=["POST"])
 def image_search():
+    ensure_model()
+
     file = request.files.get("image")
 
     if not file:
@@ -143,52 +151,42 @@ def image_search():
     try:
         scores = []
 
-        # 🔥 Bigger sample = better accuracy
-        sample_df = df.sample(min(80, len(df)))
+        # 🔥 IMPORTANT: Balanced sample (accuracy vs speed)
+        sample_df = df.sample(min(50, len(df)))
 
         for _, row in sample_df.iterrows():
             pid = str(row["id"])
 
-            # 🔥 Strong prompt (VERY IMPORTANT)
-            text = f"""
-            Product: {row['name']}
-            Category: {row['category']}
-            Description: {row['description']}
-            Type: electronic product
-            """
+            text = f"{row['name']} {row['category']} {row['description']}"
 
             clip_score = get_clip_score(image_bytes, text)
 
-            # 🔥 Keyword boost (improves precision)
-            text_all = f"{row['name']} {row['category']} {row['description']}".lower()
+            # 🔥 keyword boost (VERY IMPORTANT for accuracy)
+            text_lower = text.lower()
             keyword_score = 0
 
-            if any(word in text_all for word in ["phone", "mobile", "smartphone"]):
-                keyword_score += 0.2
+            if "phone" in text_lower or "mobile" in text_lower:
+                keyword_score += 0.3
+            if "charger" in text_lower or "cable" in text_lower:
+                keyword_score += 0.1
+            if "earphone" in text_lower or "headphone" in text_lower:
+                keyword_score += 0.1
 
-            if any(word in text_all for word in ["headphone", "earbud", "earphone"]):
-                keyword_score += 0.2
-
-            if any(word in text_all for word in ["charger", "cable", "usb"]):
-                keyword_score += 0.2
-
-            # 🔥 Final score
-            final_score = 0.8 * clip_score + 0.2 * keyword_score
+            final_score = 0.7 * clip_score + 0.3 * keyword_score
 
             scores.append((pid, final_score))
 
-        # 🔥 Sort
         scores.sort(key=lambda x: x[1], reverse=True)
 
-        # 🔥 Remove weak matches
-        filtered = [x for x in scores if x[1] > 0.15]
+        # 🔥 remove weak matches
+        filtered = [x for x in scores if x[1] > 0.2]
 
         if not filtered:
             return jsonify(df["id"].astype(str).head(TOP_N).tolist())
 
         result = [pid for pid, _ in filtered[:TOP_N]]
 
-        print("✅ FINAL RESULTS:", result)
+        print("✅ FINAL:", result)
 
         return jsonify(result)
 
@@ -196,7 +194,4 @@ def image_search():
         print("❌ Error:", e)
         return jsonify(df["id"].astype(str).head(TOP_N).tolist())
 
-# ---------------- Run ---------------- #
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+# ❌ REMOVE app.run (IMPORTANT for Render)
