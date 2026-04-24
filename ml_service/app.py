@@ -62,13 +62,13 @@ def get_clip_score(image_bytes, text):
     }
 
     try:
-        response = requests.post(HF_API_URL, headers=HF_HEADERS, json=payload, timeout=8)
+        res = requests.post(HF_API_URL, headers=HF_HEADERS, json=payload, timeout=8)
 
-        if response.status_code != 200:
-            print("HF Error:", response.text)
+        if res.status_code != 200:
+            print("HF Error:", res.text)
             return 0
 
-        result = response.json()
+        result = res.json()
 
         if isinstance(result, list) and len(result) > 0:
             return result[0].get("score", 0)
@@ -105,7 +105,7 @@ def rebuild_model():
 def ensure_model():
     global model_ready
     if not model_ready:
-        print("⚡ Loading model lazily...")
+        print("⚡ Loading model...")
         rebuild_model()
         model_ready = True
 
@@ -142,7 +142,6 @@ def image_search():
     ensure_model()
 
     file = request.files.get("image")
-
     if not file:
         return jsonify({"error": "No image"}), 400
 
@@ -151,23 +150,30 @@ def image_search():
     try:
         scores = []
 
-        # 🔥 IMPORTANT: Balanced sample (accuracy vs speed)
-        sample_df = df.sample(min(50, len(df)))
+        # 🔥 CATEGORY FILTER (VERY IMPORTANT)
+        electronics_df = df[df["category"].str.lower().str.contains("electronic")]
+
+        if electronics_df.empty:
+            electronics_df = df
+
+        # 🔥 LIMIT (FAST + BETTER)
+        sample_df = electronics_df.head(50)
 
         for _, row in sample_df.iterrows():
             pid = str(row["id"])
 
-            text = f"{row['name']} {row['category']} {row['description']}"
+            # 🔥 STRONG PROMPT
+            text = f"This is a {row['category']} product called {row['name']}. {row['description']}"
 
             clip_score = get_clip_score(image_bytes, text)
 
-            # 🔥 keyword boost (VERY IMPORTANT for accuracy)
+            # 🔥 KEYWORD BOOST
             text_lower = text.lower()
             keyword_score = 0
 
             if "phone" in text_lower or "mobile" in text_lower:
                 keyword_score += 0.3
-            if "charger" in text_lower or "cable" in text_lower:
+            if "charger" in text_lower:
                 keyword_score += 0.1
             if "earphone" in text_lower or "headphone" in text_lower:
                 keyword_score += 0.1
@@ -176,22 +182,33 @@ def image_search():
 
             scores.append((pid, final_score))
 
+        # 🔥 SORT
         scores.sort(key=lambda x: x[1], reverse=True)
 
-        # 🔥 remove weak matches
-        filtered = [x for x in scores if x[1] > 0.2]
+        # 🔥 FILTER WEAK
+        scores = [x for x in scores if x[1] > 0.2]
 
-        if not filtered:
+        if not scores:
             return jsonify(df["id"].astype(str).head(TOP_N).tolist())
 
-        result = [pid for pid, _ in filtered[:TOP_N]]
+        # 🔥 DIVERSITY FIX (NO REPEAT TYPE)
+        seen = set()
+        final = []
 
-        print("✅ FINAL:", result)
+        for pid, score in scores:
+            brand = df[df["id"] == pid]["brand"].values[0]
 
-        return jsonify(result)
+            if brand not in seen:
+                final.append(pid)
+                seen.add(brand)
+
+            if len(final) == TOP_N:
+                break
+
+        print("✅ FINAL RESULTS:", final)
+
+        return jsonify(final)
 
     except Exception as e:
         print("❌ Error:", e)
         return jsonify(df["id"].astype(str).head(TOP_N).tolist())
-
-# ❌ REMOVE app.run (IMPORTANT for Render)
