@@ -43,11 +43,12 @@ export const Shop: React.FC<ShopProps> = ({
     });
   };
 
+  // ✅ Load Products
   useEffect(() => {
     const loadProducts = async () => {
       try {
         const data = await api.getProducts();
-        console.log("Products loaded:", data.map((p: any) => p.id));
+        console.log("Products loaded:", data.length);
         setProducts(data);
       } catch {
         setError('Failed to load products.');
@@ -58,7 +59,7 @@ export const Shop: React.FC<ShopProps> = ({
     loadProducts();
   }, []);
 
-  /* ================= IMAGE SEARCH ================= */
+  // ================= IMAGE SEARCH =================
   const handleImageUpload = async (e: any) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -78,7 +79,8 @@ export const Shop: React.FC<ShopProps> = ({
 
       console.log("🚀 CLIP RESULT IDS:", ids);
 
-      const cleanIds = ids.map((id: any) => String(id));
+      // ✅ Remove duplicates
+      const cleanIds = Array.from(new Set(ids.map((id: any) => String(id))));
 
       setImageResults(cleanIds);
 
@@ -94,27 +96,39 @@ export const Shop: React.FC<ShopProps> = ({
     setImageResults(null);
   };
 
+  // ================= CATEGORY =================
   const categories = useMemo(() => {
     const unique = Array.from(new Set(products.map(p => p.category)));
     return ['All', ...unique];
   }, [products]);
 
-  /* ================= FILTER ================= */
+  // ================= FILTER =================
   const filteredProducts = useMemo(() => {
     let list = [...products];
 
-    // 🔥 FIX: DIRECT CLIP RESULTS (NO EXTRA FILTERING)
+    // 🔥 IMAGE SEARCH MODE (FIXED)
     if (imageResults) {
-      console.log("✅ Showing CLIP results directly");
+      console.log("✅ Showing CLIP results (clean)");
 
-      const ordered = imageResults
+      const uniqueIds = Array.from(new Set(imageResults));
+
+      let ordered = uniqueIds
         .map(id => products.find(p => String(p.id) === id))
         .filter(Boolean) as Product[];
+
+      // 🔥 ADD DIVERSITY
+      if (ordered.length < 5) {
+        const extra = products
+          .filter(p => !uniqueIds.includes(String(p.id)))
+          .slice(0, 5 - ordered.length);
+
+        ordered = [...ordered, ...extra];
+      }
 
       return ordered;
     }
 
-    // NORMAL FILTER
+    // 🔥 NORMAL SEARCH
     list = list.filter(p => {
       const matchCategory =
         activeCategory === 'All' || p.category === activeCategory;
@@ -132,6 +146,7 @@ export const Shop: React.FC<ShopProps> = ({
     return list;
   }, [products, search, activeCategory, sortOrder, imageResults]);
 
+  // ================= UI =================
   const SkeletonCard = () => (
     <div className="animate-pulse bg-white rounded-2xl border p-4">
       <div className="h-40 bg-gray-200 rounded-lg mb-4" />
@@ -158,8 +173,9 @@ export const Shop: React.FC<ShopProps> = ({
         </p>
       </div>
 
+      {/* SEARCH BAR */}
       <div className="sticky top-20 mb-8 bg-white p-4 border flex flex-wrap gap-3">
-        
+
         <input
           type="text"
           placeholder="Search products..."
@@ -197,6 +213,7 @@ export const Shop: React.FC<ShopProps> = ({
         </select>
       </div>
 
+      {/* CATEGORY */}
       <div className="mb-10 flex flex-wrap gap-2">
         {categories.map(category => (
           <button
@@ -213,6 +230,7 @@ export const Shop: React.FC<ShopProps> = ({
         ))}
       </div>
 
+      {/* PRODUCTS */}
       <section>
         <h2 className="text-xl font-semibold mb-4">
           {imageResults ? "Image Search Results" : "All Products"}
