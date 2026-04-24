@@ -47,7 +47,7 @@ export const Shop: React.FC<ShopProps> = ({
     const loadProducts = async () => {
       try {
         const data = await api.getProducts();
-        console.log("Products loaded:", data.map((p: any) => p.id)); // DEBUG
+        console.log("Products loaded:", data.map((p: any) => p.id));
         setProducts(data);
       } catch {
         setError('Failed to load products.');
@@ -76,9 +76,8 @@ export const Shop: React.FC<ShopProps> = ({
 
       const ids = await res.json();
 
-      console.log("IMAGE IDS:", ids); // DEBUG
+      console.log("🚀 CLIP RESULT IDS:", ids);
 
-      // FIX: always convert to string
       const cleanIds = ids.map((id: any) => String(id));
 
       setImageResults(cleanIds);
@@ -102,33 +101,30 @@ export const Shop: React.FC<ShopProps> = ({
 
   /* ================= FILTER ================= */
   const filteredProducts = useMemo(() => {
-    let list = products;
+    let list = [...products];
 
+    // 🔥 FIX: DIRECT CLIP RESULTS (NO EXTRA FILTERING)
     if (imageResults) {
-      console.log("Filtering with image IDs:", imageResults);
+      console.log("✅ Showing CLIP results directly");
 
-      list = products.filter(p =>
-        imageResults.includes(String(p.id)) // FIX HERE
-      );
+      const ordered = imageResults
+        .map(id => products.find(p => String(p.id) === id))
+        .filter(Boolean) as Product[];
 
-      // 🔥 fallback if nothing matches
-      if (list.length === 0) {
-        console.warn("No match found, showing fallback");
-        return products.slice(0, 8);
-      }
-
-    } else {
-      list = products.filter(p => {
-        const matchCategory =
-          activeCategory === 'All' || p.category === activeCategory;
-
-        const matchSearch =
-          p.name.toLowerCase().includes(search.toLowerCase()) ||
-          p.category.toLowerCase().includes(search.toLowerCase());
-
-        return matchCategory && matchSearch;
-      });
+      return ordered;
     }
+
+    // NORMAL FILTER
+    list = list.filter(p => {
+      const matchCategory =
+        activeCategory === 'All' || p.category === activeCategory;
+
+      const matchSearch =
+        p.name.toLowerCase().includes(search.toLowerCase()) ||
+        p.category.toLowerCase().includes(search.toLowerCase());
+
+      return matchCategory && matchSearch;
+    });
 
     if (sortOrder === 'low') list.sort((a, b) => a.price - b.price);
     if (sortOrder === 'high') list.sort((a, b) => b.price - a.price);
@@ -153,16 +149,16 @@ export const Shop: React.FC<ShopProps> = ({
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <div className="max-w-7xl mx-auto px-4 py-10">
 
       <div className="mb-10">
-        <h1 className="text-3xl font-bold text-gray-900">Shop</h1>
-        <p className="text-gray-500 mt-1">
-          Discover products with AI-powered recommendations
+        <h1 className="text-3xl font-bold">Shop</h1>
+        <p className="text-gray-500">
+          Discover products with AI-powered search
         </p>
       </div>
 
-      <div className="sticky top-20 z-30 mb-8 bg-white/80 backdrop-blur rounded-xl p-4 border flex flex-wrap gap-3">
+      <div className="sticky top-20 mb-8 bg-white p-4 border flex flex-wrap gap-3">
         
         <input
           type="text"
