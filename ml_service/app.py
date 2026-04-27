@@ -12,7 +12,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, supports_credentials=True)
+
+# 🔥 FIXED CORS (VERY IMPORTANT)
+CORS(
+    app,
+    resources={r"/*": {"origins": "*"}},  # allow all (safe for project/demo)
+    supports_credentials=True
+)
 
 TOP_N = 5
 
@@ -95,13 +101,10 @@ def cached_recommend(product_id: str):
 
     current = df[df["id"] == product_id].iloc[0]
 
-    # 🔥 Filter same category
     filtered = df[df["category"] == current["category"]]
-
     if len(filtered) < 5:
         filtered = df
 
-    # 🔥 TF-IDF
     tfidf = TfidfVectorizer(stop_words="english")
 
     texts = (
@@ -117,7 +120,6 @@ def cached_recommend(product_id: str):
 
     scores = cosine_similarity(current_vec, matrix).flatten()
 
-    # 🔥 Brand boost
     boost = (filtered["brand"] == current["brand"]).astype(int) * 0.2
     final_scores = scores + boost
 
@@ -136,12 +138,18 @@ def cached_recommend(product_id: str):
 
     return results
 
-# ---------------- NEW: AI EXPLAINER ---------------- #
+# ---------------- AI EXPLAINER ---------------- #
 @app.route("/explain", methods=["POST"])
 def explain():
     ensure_model()
 
-    product_id = str(request.json.get("product_id", ""))
+    # 🔥 SAFE JSON HANDLING (FIXED 500 ERROR)
+    data = request.get_json()
+
+    if not data or "product_id" not in data:
+        return jsonify({"reasons": ["Popular product"]})
+
+    product_id = str(data.get("product_id"))
 
     if product_id not in df["id"].values:
         return jsonify({"reasons": ["Popular product"]})
@@ -150,7 +158,6 @@ def explain():
 
     reasons = []
 
-    # 🔥 Simple smart rules
     if product["category"]:
         reasons.append(f"Belongs to {product['category']} category")
 
