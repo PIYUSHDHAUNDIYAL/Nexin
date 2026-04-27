@@ -18,7 +18,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 }) => {
   return (
     <div
-      onClick={() => onClick(product.id)}
+      onClick={() => onClick(String(product.id))}
       className="
         group relative flex flex-col
         bg-white rounded-2xl border border-gray-100
@@ -28,12 +28,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         cursor-pointer
       "
     >
-      {/*  Wishlist */}
+      {/* ❤️ Wishlist */}
       <button
+        type="button"
         aria-label="Toggle wishlist"
         onClick={(e) => {
           e.stopPropagation();
-          onToggleWishlist(product.id);
+          onToggleWishlist(String(product.id));
         }}
         className="
           absolute top-3 right-3 z-10
@@ -43,16 +44,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           shadow hover:scale-110 transition
         "
       >
-        <span className={`text-lg ${isWishlisted ? 'text-red-500' : 'text-gray-400'}`}>
+        <span
+          className={`text-lg ${
+            isWishlisted ? 'text-red-500' : 'text-gray-400'
+          }`}
+        >
           ♥
         </span>
       </button>
 
-      {/*  Image */}
-      <div className="overflow-hidden rounded-t-2xl">
+      {/* 🖼 Image */}
+      <div className="overflow-hidden rounded-t-2xl bg-gray-100">
         <img
-          src={product.image}
+          src={product.image || '/placeholder.png'}
           alt={product.name}
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = '/placeholder.png';
+          }}
           className="
             h-64 w-full object-cover
             transition-transform duration-300
@@ -61,12 +69,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         />
       </div>
 
-      {/*  Content */}
+      {/* 📦 Content */}
       <div className="p-4 flex flex-col flex-grow">
         {/* Brand */}
-        <p className="text-xs uppercase tracking-wide text-gray-400">
-          {product.brand}
-        </p>
+        {product.brand && (
+          <p className="text-xs uppercase tracking-wide text-gray-400">
+            {product.brand}
+          </p>
+        )}
 
         {/* Name */}
         <h3 className="mt-1 font-semibold text-gray-900 leading-snug line-clamp-2">
@@ -74,17 +84,20 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         </h3>
 
         {/* Description */}
-        <p className="text-sm text-gray-500 line-clamp-2 mt-1">
-          {product.description}
-        </p>
+        {product.description && (
+          <p className="text-sm text-gray-500 line-clamp-2 mt-1">
+            {product.description}
+          </p>
+        )}
 
-        {/* Price + CTA */}
+        {/* 💰 Price + CTA */}
         <div className="mt-auto flex items-center justify-between pt-4">
           <span className="text-lg font-bold text-indigo-600">
             ₹{product.price.toLocaleString('en-IN')}
           </span>
 
           <button
+            type="button"
             onClick={(e) => onAddToCart(product, e)}
             className="
               px-4 py-1.5 rounded-lg text-sm font-medium
