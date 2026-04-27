@@ -18,6 +18,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({
   const [recommendations, setRecommendations] = useState<Product[]>([]);
   const [recentlyViewed, setRecentlyViewed] = useState<Product[]>([]);
   const [wishlist, setWishlist] = useState<string[]>([]);
+  const [reasons, setReasons] = useState<string[]>([]); // 🔥 NEW
   const [loading, setLoading] = useState(true);
   const [recLoading, setRecLoading] = useState(false);
 
@@ -48,23 +49,27 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({
       setLoading(true);
       setRecommendations([]);
       setRecentlyViewed([]);
+      setReasons([]); // 🔥 reset
 
       try {
-        // 1️⃣ Fetch product (dataset ID)
         const prod = await api.getProduct(String(productId));
-        if (!mounted) return;
+        if (!mounted || !prod) return;
 
         setProduct(prod);
 
-        // 2️⃣ Track view
+        // Track view
         api.trackView(String(prod.id));
 
-        // 3️⃣ Get recommendations
+        // 🔥 AI EXPLANATION
+        const explanation = await api.getExplanation(String(prod.id));
+        if (mounted) setReasons(explanation);
+
+        // Recommendations
         setRecLoading(true);
         const recs = await api.getRecommendations(String(prod.id));
         if (mounted) setRecommendations(recs);
 
-        // 4️⃣ Recently viewed
+        // Recently viewed
         const viewedIds = JSON.parse(
           localStorage.getItem('recentlyViewed') || '[]'
         ) as string[];
@@ -76,6 +81,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({
         );
 
         if (mounted) setRecentlyViewed(recent);
+
       } catch (err) {
         console.error('Error loading product details:', err);
       } finally {
@@ -158,15 +164,24 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({
 
           <button
             onClick={() => onAddToCart(product)}
-            className="
-              mt-8 w-full py-3 rounded-xl
-              bg-indigo-600 text-white font-medium
-              hover:bg-indigo-700 active:scale-95
-              transition
-            "
+            className="mt-8 w-full py-3 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 active:scale-95 transition"
           >
             Add to Cart
           </button>
+
+          {/* 🔥 AI EXPLAINER UI */}
+          {reasons.length > 0 && (
+            <div className="mt-6 p-4 rounded-xl bg-indigo-50 border border-indigo-100">
+              <h3 className="font-semibold text-indigo-700 mb-2">
+                🧠 Why this product is recommended
+              </h3>
+              <ul className="list-disc ml-5 text-sm text-gray-700">
+                {reasons.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
 
@@ -176,16 +191,13 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({
           🤖 AI Recommended for You
         </h2>
         <p className="text-sm text-gray-500 mb-6">
-          Based on brand, category, and price similarity
+          Based on brand, category, and similarity
         </p>
 
         {recLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-72 bg-gray-200 rounded-2xl animate-pulse"
-              />
+              <div key={i} className="h-72 bg-gray-200 rounded-2xl animate-pulse" />
             ))}
           </div>
         ) : recommendations.length > 0 ? (
