@@ -22,12 +22,12 @@ export const Shop: React.FC<ShopProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const [imageResults, setImageResults] = useState<string[] | null>(null);
-
+  // ================= LOAD SEARCH =================
   useEffect(() => {
     setSearch(searchQuery);
   }, [searchQuery]);
 
+  // ================= LOAD WISHLIST =================
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem('wishlist') || '[]');
     setWishlist(saved);
@@ -38,17 +38,17 @@ export const Shop: React.FC<ShopProps> = ({
       const updated = prev.includes(id)
         ? prev.filter(pid => pid !== id)
         : [...prev, id];
+
       localStorage.setItem('wishlist', JSON.stringify(updated));
       return updated;
     });
   };
 
-  // ✅ Load Products
+  // ================= LOAD PRODUCTS =================
   useEffect(() => {
     const loadProducts = async () => {
       try {
         const data = await api.getProducts();
-        console.log("Products loaded:", data.length);
         setProducts(data);
       } catch {
         setError('Failed to load products.');
@@ -58,43 +58,6 @@ export const Shop: React.FC<ShopProps> = ({
     };
     loadProducts();
   }, []);
-
-  // ================= IMAGE SEARCH =================
-  const handleImageUpload = async (e: any) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    setLoading(true);
-
-    try {
-      const formData = new FormData();
-      formData.append("image", file);
-
-      const res = await fetch("https://nexin-kqyu.onrender.com/image-search", {
-        method: "POST",
-        body: formData
-      });
-
-      const ids = await res.json();
-
-      console.log("🚀 CLIP RESULT IDS:", ids);
-
-      // ✅ Remove duplicates
-      const cleanIds = Array.from(new Set(ids.map((id: any) => String(id))));
-
-      setImageResults(cleanIds);
-
-    } catch (err) {
-      console.error(err);
-      alert("Image search failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const clearImageSearch = () => {
-    setImageResults(null);
-  };
 
   // ================= CATEGORY =================
   const categories = useMemo(() => {
@@ -106,29 +69,6 @@ export const Shop: React.FC<ShopProps> = ({
   const filteredProducts = useMemo(() => {
     let list = [...products];
 
-    // 🔥 IMAGE SEARCH MODE (FIXED)
-    if (imageResults) {
-      console.log("✅ Showing CLIP results (clean)");
-
-      const uniqueIds = Array.from(new Set(imageResults));
-
-      let ordered = uniqueIds
-        .map(id => products.find(p => String(p.id) === id))
-        .filter(Boolean) as Product[];
-
-      // 🔥 ADD DIVERSITY
-      if (ordered.length < 5) {
-        const extra = products
-          .filter(p => !uniqueIds.includes(String(p.id)))
-          .slice(0, 5 - ordered.length);
-
-        ordered = [...ordered, ...extra];
-      }
-
-      return ordered;
-    }
-
-    // 🔥 NORMAL SEARCH
     list = list.filter(p => {
       const matchCategory =
         activeCategory === 'All' || p.category === activeCategory;
@@ -144,9 +84,9 @@ export const Shop: React.FC<ShopProps> = ({
     if (sortOrder === 'high') list.sort((a, b) => b.price - a.price);
 
     return list;
-  }, [products, search, activeCategory, sortOrder, imageResults]);
+  }, [products, search, activeCategory, sortOrder]);
 
-  // ================= UI =================
+  // ================= SKELETON =================
   const SkeletonCard = () => (
     <div className="animate-pulse bg-white rounded-2xl border p-4">
       <div className="h-40 bg-gray-200 rounded-lg mb-4" />
@@ -166,14 +106,15 @@ export const Shop: React.FC<ShopProps> = ({
   return (
     <div className="max-w-7xl mx-auto px-4 py-10">
 
+      {/* HEADER */}
       <div className="mb-10">
         <h1 className="text-3xl font-bold">Shop</h1>
         <p className="text-gray-500">
-          Discover products with AI-powered search
+          Discover products with smart recommendations
         </p>
       </div>
 
-      {/* SEARCH BAR */}
+      {/* SEARCH + SORT */}
       <div className="sticky top-20 mb-8 bg-white p-4 border flex flex-wrap gap-3">
 
         <input
@@ -183,22 +124,6 @@ export const Shop: React.FC<ShopProps> = ({
           onChange={(e) => setSearch(e.target.value)}
           className="flex-1 px-4 py-2 border rounded-lg"
         />
-
-        <input
-          type="file"
-          accept="image/*"
-          onChange={handleImageUpload}
-          className="px-2 py-2 border rounded-lg"
-        />
-
-        {imageResults && (
-          <button
-            onClick={clearImageSearch}
-            className="px-3 py-2 bg-red-500 text-white rounded-lg"
-          >
-            Clear Image Search
-          </button>
-        )}
 
         <select
           value={sortOrder}
@@ -233,17 +158,17 @@ export const Shop: React.FC<ShopProps> = ({
       {/* PRODUCTS */}
       <section>
         <h2 className="text-xl font-semibold mb-4">
-          {imageResults ? "Image Search Results" : "All Products"}
+          All Products
         </h2>
 
         {loading ? (
-          <div className="grid grid-cols-4 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {Array.from({ length: 8 }).map((_, i) => (
               <SkeletonCard key={i} />
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-4 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {filteredProducts.map(product => (
               <ProductCard
                 key={product.id}
