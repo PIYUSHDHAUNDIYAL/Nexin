@@ -53,38 +53,80 @@ export const api = {
     }
   },
 
+  // ================= FALLBACK (IMPORTANT) =================
+  async getFallbackRecommendations(productId: string): Promise<Product[]> {
+    try {
+      // Get current product category
+      const current = await this.getProduct(productId);
+
+      if (!current) return [];
+
+      // Try same category first
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('category', current.category)
+        .neq('id', productId)
+        .limit(5);
+
+      if (!error && data && data.length > 0) {
+        console.log("⚡ Using category fallback");
+        return data as Product[];
+      }
+
+      // Final fallback: random products
+      const { data: randomData } = await supabase
+        .from('products')
+        .select('*')
+        .limit(5);
+
+      console.log("⚡ Using random fallback");
+
+      return (randomData || []) as Product[];
+
+    } catch (err) {
+      console.error("❌ Fallback error:", err);
+      return [];
+    }
+  },
+
   // ================= ML RECOMMENDATIONS =================
   async getRecommendations(productId: string): Promise<Product[]> {
     try {
       const controller = new AbortController();
 
-      // 🔥 timeout fix (important)
       const timeout = setTimeout(() => controller.abort(), 8000);
 
       const res = await fetch(`${ML_API}/recommend`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_id: productId }),
+
+        // 🔥 FORCE STRING ID (CRITICAL FIX)
+        body: JSON.stringify({ product_id: String(productId) }),
+
         signal: controller.signal
       });
 
       clearTimeout(timeout);
 
       if (!res.ok) {
-        console.warn("⚠️ ML API failed");
-        return [];
+        console.warn("⚠️ ML API failed → using fallback");
+        return this.getFallbackRecommendations(productId);
       }
 
       let ids: string[] = await res.json();
 
-      console.log("🎯 Recommendation IDs:", ids);
+      console.log("🎯 ML IDs:", ids);
 
-      if (!ids || !ids.length) return [];
+      if (!ids || ids.length === 0) {
+        console.warn("⚠️ Empty ML result → fallback");
+        return this.getFallbackRecommendations(productId);
+      }
 
-      // 🔥 REMOVE DUPLICATES (VERY IMPORTANT)
+      // 🔥 CLEAN IDS
       ids = Array.from(new Set(ids.map(id => String(id))));
 
-      // 🔥 FETCH PRODUCTS
+      // 🔥 FETCH PRODUCTS IN ONE QUERY
       const { data, error } = await supabase
         .from('products')
         .select('*')
@@ -92,12 +134,15 @@ export const api = {
 
       if (error) {
         console.error('❌ Supabase error:', error);
-        return [];
+        return this.getFallbackRecommendations(productId);
       }
 
-      if (!data) return [];
+      if (!data || data.length === 0) {
+        console.warn("⚠️ No products found → fallback");
+        return this.getFallbackRecommendations(productId);
+      }
 
-      // 🔥 PRESERVE ORDER (CRITICAL FIX)
+      // 🔥 PRESERVE ML ORDER (VERY IMPORTANT)
       const orderedProducts = ids
         .map(id => data.find(p => String(p.id) === id))
         .filter(Boolean) as Product[];
@@ -106,7 +151,9 @@ export const api = {
 
     } catch (err) {
       console.error("❌ Recommendation error:", err);
-      return [];
+
+      // 🔥 NETWORK / TIMEOUT FAIL SAFE
+      return this.getFallbackRecommendations(productId);
     }
   }
 
