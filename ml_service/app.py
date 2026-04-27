@@ -7,7 +7,6 @@ from functools import lru_cache
 import os
 import requests
 from dotenv import load_dotenv
-import base64
 
 # ---------------- Setup ---------------- #
 load_dotenv()
@@ -19,7 +18,6 @@ TOP_N = 5
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-HF_API_KEY = os.getenv("HF_API_KEY")
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -27,16 +25,11 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
-HF_API_URL = "https://api-inference.huggingface.co/models/openai/clip-vit-base-patch32"
-HF_HEADERS = {
-    "Authorization": f"Bearer {HF_API_KEY}"
-}
-
 # ---------------- Globals ---------------- #
 df = pd.DataFrame()
 model_ready = False
 
-# ---------------- Load FULL Data (Pagination Fix) ---------------- #
+# ---------------- Load FULL Data ---------------- #
 def load_products():
     all_data = []
     start = 0
@@ -76,7 +69,7 @@ def rebuild_model():
 
     df["id"] = df["id"].astype(str)
 
-    print("✅ Model ready with full dataset")
+    print("✅ Model ready")
     return True
 
 # ---------------- Lazy Load ---------------- #
@@ -93,23 +86,22 @@ def fallback():
         return []
     return df["id"].sample(min(TOP_N, len(df))).tolist()
 
-# ---------------- Recommendation (OPTIMIZED) ---------------- #
+# ---------------- Recommendation ---------------- #
 @lru_cache(maxsize=5000)
 def cached_recommend(product_id: str):
 
     if product_id not in df["id"].values:
-        print("❌ Product not found")
         return fallback()
 
     current = df[df["id"] == product_id].iloc[0]
 
-    # 🔥 STEP 1: FILTER SAME CATEGORY
+    # 🔥 Filter same category
     filtered = df[df["category"] == current["category"]]
 
     if len(filtered) < 5:
         filtered = df
 
-    # 🔥 STEP 2: TF-IDF ON FILTERED ONLY
+    # 🔥 TF-IDF
     tfidf = TfidfVectorizer(stop_words="english")
 
     texts = (
@@ -125,11 +117,10 @@ def cached_recommend(product_id: str):
 
     scores = cosine_similarity(current_vec, matrix).flatten()
 
-    # 🔥 STEP 3: BRAND BOOST
+    # 🔥 Brand boost
     boost = (filtered["brand"] == current["brand"]).astype(int) * 0.2
     final_scores = scores + boost
 
-    # 🔥 STEP 4: SORT
     top_indices = final_scores.argsort()[::-1]
 
     results = []
@@ -143,62 +134,35 @@ def cached_recommend(product_id: str):
     if not results:
         return fallback()
 
-    print("✅ Recommendations:", results)
     return results
 
-# ---------------- IMAGE SEARCH (unchanged) ---------------- #
-def get_clip_score(image_bytes, text):
-    payload = {
-        "inputs": {
-            "image": base64.b64encode(image_bytes).decode("utf-8"),
-            "text": text
-        }
-    }
-
-    try:
-        res = requests.post(HF_API_URL, headers=HF_HEADERS, json=payload, timeout=6)
-        if res.status_code != 200:
-            return 0
-        result = res.json()
-        if isinstance(result, list) and len(result) > 0:
-            return result[0].get("score", 0)
-        return 0
-    except:
-        return 0
-
-@app.route("/image-search", methods=["POST"])
-def image_search():
+# ---------------- NEW: AI EXPLAINER ---------------- #
+@app.route("/explain", methods=["POST"])
+def explain():
     ensure_model()
 
-    file = request.files.get("image")
-    if not file:
-        return jsonify({"error": "No image"}), 400
+    product_id = str(request.json.get("product_id", ""))
 
-    image_bytes = file.read()
+    if product_id not in df["id"].values:
+        return jsonify({"reasons": ["Popular product"]})
 
-    try:
-        scores = []
+    product = df[df["id"] == product_id].iloc[0]
 
-        sample_df = df.sample(min(50, len(df)))
+    reasons = []
 
-        for _, row in sample_df.iterrows():
-            pid = str(row["id"])
-            text = f"{row['name']} {row['category']}"
+    # 🔥 Simple smart rules
+    if product["category"]:
+        reasons.append(f"Belongs to {product['category']} category")
 
-            clip_score = get_clip_score(image_bytes, text)
+    if product["brand"]:
+        reasons.append(f"From trusted brand {product['brand']}")
 
-            final_score = clip_score
-            scores.append((pid, final_score))
+    if product["price"]:
+        reasons.append("Matches your budget range")
 
-        scores.sort(key=lambda x: x[1], reverse=True)
+    reasons.append("Recommended based on similar products")
 
-        final = [x[0] for x in scores[:TOP_N]]
-
-        return jsonify(final)
-
-    except Exception as e:
-        print("❌ Error:", e)
-        return jsonify(fallback())
+    return jsonify({"reasons": reasons})
 
 # ---------------- Routes ---------------- #
 @app.route("/")
