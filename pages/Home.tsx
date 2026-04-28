@@ -7,10 +7,10 @@ interface HomeProps {
 export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
   const images = [
-  "https://images.unsplash.com/photo-1607082349566-187342175e2f?q=80&w=1600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1607083206968-13611e3d76db?q=80&w=1600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1606813907291-d86efa9b94db?q=80&w=1600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1510557880182-3b6d4c8b1c6b?q=80&w=1600&auto=format&fit=crop"
+  "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?q=80&w=1600",
+  "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?q=80&w=1600",
+  "https://images.unsplash.com/photo-1580910051074-3eb694886505?q=80&w=1600",
+  "https://images.unsplash.com/photo-1606813907291-d86efa9b94db?q=80&w=1600"
 ];
 
   const [index, setIndex] = useState(0);
