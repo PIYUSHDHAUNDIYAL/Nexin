@@ -12,17 +12,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-CORS(
-    app,
-    resources={
-        r"/*": {
-            "origins": [
-                "https://nexin.vercel.app",
-                "https://nexin-seven.vercel.app"
-            ]
-        }
-    }
-)
+
+# ✅ FIXED CORS (ALLOW ALL VERCEL + LOCAL + PREVIEW)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 TOP_N = 5
 PRICE_RANGE = 0.30
@@ -107,7 +99,7 @@ def cached_recommend(product_id: str):
 
     return df.loc[[i[0] for i in scores[:TOP_N]], "id"].astype(str).tolist()
 
-# ---------------- Build / Rebuild Model ---------------- #
+# ---------------- Build Model ---------------- #
 def rebuild_model():
     global df, tfidf_matrix, cosine_sim, indices, max_price
 
@@ -123,13 +115,7 @@ def rebuild_model():
 
     df["soup"] = df["name"] + " " + df["brand"] + " " + df["category"] + " " + df["description"]
 
-    tfidf = TfidfVectorizer(
-        stop_words="english",
-        ngram_range=(1, 2),
-        max_df=0.8,
-        min_df=1
-    )
-
+    tfidf = TfidfVectorizer(stop_words="english", ngram_range=(1, 2))
     tfidf_matrix = tfidf.fit_transform(df["soup"])
     cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
 
@@ -137,32 +123,50 @@ def rebuild_model():
     max_price = df["price"].max() if df["price"].max() > 0 else 1
 
     cached_recommend.cache_clear()
-    print("♻️ ML model rebuilt & cache cleared")
+    print("♻️ ML model rebuilt")
     return True
 
-# Initial load (safe now)
+# ---------------- INIT ---------------- #
 rebuild_model()
 
-# ---------------- Routes ---------------- #
+# ---------------- ROUTES ---------------- #
+
 @app.route("/", methods=["GET"])
 def root():
-    return jsonify({
-        "service": "Nexin ML Recommendation API",
-        "status": "running"
-    })
+    return jsonify({"service": "Nexin ML API", "status": "running"})
+
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({
-        "status": "ML Service Running",
-        "products_loaded": int(len(df))
-    })
+    return jsonify({"status": "ok", "products": int(len(df))})
 
+
+# ✅ FIXED: THIS IS WHAT YOUR FRONTEND NEEDS
 @app.route("/recommend", methods=["POST"])
 def recommend():
-    payload = request.get_json(force=True)
-    product_id = str(payload.get("product_id", ""))
+    data = request.get_json(force=True)
+    product_id = str(data.get("product_id", ""))
     return jsonify(cached_recommend(product_id))
+
+
+# ✅ NEW: FIX FOR YOUR ERROR (/explain was missing)
+@app.route("/explain", methods=["POST"])
+def explain():
+    data = request.get_json(force=True)
+    product_id = str(data.get("product_id", ""))
+
+    if product_id not in indices:
+        return jsonify({"error": "Product not found"}), 404
+
+    idx = indices[product_id]
+    product = df.loc[idx]
+
+    return jsonify({
+        "product_id": product_id,
+        "name": product["name"],
+        "reason": "Recommended based on similarity, category, brand, and price proximity"
+    })
+
 
 @app.route("/reload", methods=["POST"])
 def reload_model():
@@ -170,11 +174,10 @@ def reload_model():
     if token != ADMIN_RELOAD_TOKEN:
         return jsonify({"error": "Unauthorized"}), 401
 
-    success = rebuild_model()
-    return jsonify({"reloaded": success})
+    return jsonify({"reloaded": rebuild_model()})
 
-# ---------------- Run ---------------- #
+
+# ---------------- RUN ---------------- #
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    print(f"🚀 Nexin ML Service running on port {port}")
     app.run(host="0.0.0.0", port=port)
