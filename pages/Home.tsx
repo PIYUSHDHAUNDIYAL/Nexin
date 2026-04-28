@@ -6,29 +6,37 @@ interface HomeProps {
 
 export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
-  // 🔥 Slider images
+  // 🔥 FAST SLIDER IMAGES (optimized)
   const images = [
-    "https://images.unsplash.com/photo-1517336714731-489689fd1ca8",
-    "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9",
-    "https://images.unsplash.com/photo-1580910051074-3eb694886505",
-    "https://images.unsplash.com/photo-1585386959984-a41552262c4b"
+    "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=1200",
+    "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=1200",
+    "https://images.unsplash.com/photo-1580910051074-3eb694886505?w=1200"
   ];
 
   const [index, setIndex] = useState(0);
 
+  // 🔥 FAST AUTO SLIDE
   useEffect(() => {
     const interval = setInterval(() => {
       setIndex((prev) => (prev + 1) % images.length);
-    }, 4000);
+    }, 2000); // ⚡ fast
+
     return () => clearInterval(interval);
   }, []);
 
-  // 🔥 Simple analytics
+  // 🔥 PRELOAD IMAGES (no lag)
+  useEffect(() => {
+    images.forEach((src) => {
+      const img = new Image();
+      img.src = src;
+    });
+  }, []);
+
+  // 🔥 SIMPLE ANALYTICS
   const visits = Number(localStorage.getItem("visits") || 0) + 1;
   localStorage.setItem("visits", String(visits));
 
   const viewed = JSON.parse(localStorage.getItem("recentlyViewed") || "[]");
-
   const activeUsers = Math.floor(visits / 2) + viewed.length;
 
   const weekly = [40, 60, 30, 80, 50, 70, 90];
@@ -36,29 +44,38 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
 
-      {/* ================= HERO ================= */}
-      <div
-        className="relative h-[450px] flex items-center justify-center text-center rounded-xl mb-16 overflow-hidden"
-        style={{
-          backgroundImage: `url(${images[index]})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center"
-        }}
-      >
-        <div className="absolute inset-0 bg-black/60"></div>
+      {/* ================= SLIDER ================= */}
+      <div className="relative h-[400px] overflow-hidden rounded-xl mb-16">
 
-        <div className="relative z-10 text-white">
-          <h1 className="text-4xl font-bold sm:text-5xl">
-            Smart Shopping <span className="text-indigo-400">Redefined</span>
-          </h1>
-
-          <button
-            onClick={() => onNavigate('shop')}
-            className="mt-6 px-6 py-3 bg-indigo-600 rounded-lg hover:bg-indigo-700 transition"
-          >
-            Go to Shop
-          </button>
+        <div
+          className="flex transition-transform duration-700 ease-in-out"
+          style={{ transform: `translateX(-${index * 100}%)` }}
+        >
+          {images.map((img, i) => (
+            <div
+              key={i}
+              className="min-w-full h-[400px] bg-cover bg-center"
+              style={{ backgroundImage: `url(${img})` }}
+            />
+          ))}
         </div>
+
+        {/* Overlay Content */}
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+          <div className="text-center text-white">
+            <h1 className="text-4xl font-bold sm:text-5xl">
+              Smart Shopping <span className="text-indigo-400">Redefined</span>
+            </h1>
+
+            <button
+              onClick={() => onNavigate('shop')}
+              className="mt-6 px-6 py-3 bg-indigo-600 rounded-lg hover:bg-indigo-700 transition"
+            >
+              Go to Shop
+            </button>
+          </div>
+        </div>
+
       </div>
 
       {/* ================= ANALYTICS ================= */}
@@ -84,12 +101,11 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
         </div>
 
-        {/* 🔥 CLEAN GRAPH (NO ANIMATION) */}
+        {/* 🔥 CLEAN GRAPH */}
         <div>
           <p className="text-sm text-gray-500 mb-3">Weekly Activity</p>
 
           <div className="flex items-end gap-3 h-32">
-
             {weekly.map((val, i) => (
               <div key={i} className="flex flex-col items-center">
 
@@ -104,7 +120,6 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
               </div>
             ))}
-
           </div>
         </div>
       </div>
