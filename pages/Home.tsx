@@ -6,7 +6,6 @@ interface HomeProps {
 
 export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
-  // 🔥 Slider images (external)
   const images = [
     "https://images.unsplash.com/photo-1517336714731-489689fd1ca8",
     "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9",
@@ -19,16 +18,16 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   useEffect(() => {
     const interval = setInterval(() => {
       setIndex((prev) => (prev + 1) % images.length);
-    }, 3000); // 🔥 faster sliding
+    }, 3000);
     return () => clearInterval(interval);
   }, []);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
 
-      {/* ================= HERO SLIDER ================= */}
+      {/* ================= HERO ================= */}
       <div
-        className="relative h-[450px] flex items-center justify-center text-center rounded-xl mb-16 overflow-hidden transition-all duration-700"
+        className="relative h-[450px] flex items-center justify-center text-center rounded-xl mb-16 overflow-hidden"
         style={{
           backgroundImage: `url(${images[index]})`,
           backgroundSize: "cover",
@@ -55,38 +54,51 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         </div>
       </div>
 
-      {/* ================= CATEGORY CARDS ================= */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-16">
+      {/* ================= CATEGORY CARDS (UPDATED) ================= */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6 mb-16">
 
-        <div className="bg-black text-white p-6 rounded-xl relative overflow-hidden">
-          <h3 className="text-lg font-bold">Earphones</h3>
-          <p className="text-sm opacity-70">Enjoy music</p>
+        <div className="bg-black text-white p-5 rounded-xl">
+          <h3 className="font-bold">Earphones</h3>
+          <p className="text-xs opacity-70">Enjoy music</p>
         </div>
 
-        <div className="bg-yellow-400 p-6 rounded-xl">
-          <h3 className="text-lg font-bold">Smart Watch</h3>
-          <p className="text-sm">Track fitness</p>
+        <div className="bg-yellow-400 p-5 rounded-xl">
+          <h3 className="font-bold">Smart Watch</h3>
+          <p className="text-xs">Track fitness</p>
         </div>
 
-        <div className="bg-red-500 text-white p-6 rounded-xl">
-          <h3 className="text-lg font-bold">Laptop</h3>
-          <p className="text-sm">Powerful performance</p>
+        <div className="bg-red-500 text-white p-5 rounded-xl">
+          <h3 className="font-bold">Laptop</h3>
+          <p className="text-xs">Performance</p>
+        </div>
+
+        {/* 🔥 NEW */}
+        <div className="bg-indigo-500 text-white p-5 rounded-xl">
+          <h3 className="font-bold">Mobile</h3>
+          <p className="text-xs">Latest phones</p>
+        </div>
+
+        <div className="bg-green-500 text-white p-5 rounded-xl">
+          <h3 className="font-bold">Office</h3>
+          <p className="text-xs">Work setup</p>
+        </div>
+
+        <div className="bg-gray-800 text-white p-5 rounded-xl">
+          <h3 className="font-bold">Gaming</h3>
+          <p className="text-xs">Pro gear</p>
         </div>
 
       </div>
 
-      {/* ================= FEATURED SECTION ================= */}
+      {/* ================= FEATURED (NO BUTTON) ================= */}
       <div className="bg-white p-6 rounded-xl shadow flex flex-col sm:flex-row items-center justify-between">
 
         <div>
           <p className="text-sm text-gray-400">Special Offer</p>
           <h2 className="text-2xl font-bold">Gaming Console</h2>
-          <button
-            onClick={() => onNavigate('shop')}
-            className="mt-4 px-5 py-2 bg-indigo-600 text-white rounded-lg"
-          >
-            Explore
-          </button>
+          <p className="text-sm text-gray-500 mt-2">
+            Next-gen performance & immersive experience
+          </p>
         </div>
 
         <img
