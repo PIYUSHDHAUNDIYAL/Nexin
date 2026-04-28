@@ -1,67 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Navbar } from './components/Navbar';
 import { Home } from './pages/Home';
 import { Shop } from './pages/Shop';
 import { ProductDetails } from './pages/ProductDetails';
 import { CartDrawer } from './components/CartDrawer';
-import { Login } from './pages/Login';
-import { supabaseClient } from './services/supabaseClient';
 
 import { Product, CartItem } from './types';
 
-// ✅ Added login
-type Page = 'home' | 'shop' | 'product' | 'login';
+// ✅ ONLY 3 PAGES NOW
+type Page = 'home' | 'shop' | 'product';
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('login');
+  const [currentPage, setCurrentPage] = useState<Page>('home');
   const [currentProductId, setCurrentProductId] = useState<string | undefined>();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [shopSearch, setShopSearch] = useState('');
 
-  // ✅ REAL AUTH STATE
-  const [session, setSession] = useState<any>(null);
-
-  // ================= AUTH LISTENER =================
-  useEffect(() => {
-    // Get current session
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      if (data.session) {
-        setCurrentPage('home');
-      }
-    });
-
-    // Listen for changes (login/logout)
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-
-        if (session) {
-          setCurrentPage('home');
-        } else {
-          setCurrentPage('login');
-        }
-      }
-    );
-
-    return () => {
-      listener.subscription.unsubscribe();
-    };
-  }, []);
-
   // ================= Navigation =================
   const navigate = (page: string, value?: string) => {
-    // 🔒 Prevent access if not logged in
-    if (!session && page !== 'login') {
-      setCurrentPage('login');
-      return;
-    }
-
-    if (page === 'login') {
-      setCurrentPage('login');
-    } 
-    else if (page === 'product' && value) {
+    if (page === 'product' && value) {
       setCurrentProductId(value);
       setCurrentPage('product');
     } 
@@ -103,11 +61,6 @@ function App() {
 
   // ================= Cart =================
   const addToCart = (product: Product) => {
-    if (!session) {
-      setCurrentPage('login'); // 🔒 block cart if not logged in
-      return;
-    }
-
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id);
 
@@ -129,43 +82,30 @@ function App() {
     setCart(prev => prev.filter(item => item.id !== id));
   };
 
+  // 🔥 NEW: CLEAR CART AFTER ORDER
   const clearCart = () => {
     setCart([]);
-  };
-
-  // ================= Logout =================
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
   };
 
   // ================= UI =================
   return (
     <div className="min-h-screen bg-gray-50">
 
-      {/* ✅ Navbar only if logged in */}
-      {session && (
-        <Navbar
-          cart={cart}
-          onToggleCart={() => setIsCartOpen(true)}
-          onNavigate={navigate}
-          onLogout={handleLogout}
-          isLoggedIn={!!session}
-        />
-      )}
+      {/* ===== Navbar ===== */}
+      <Navbar
+        cart={cart}
+        onToggleCart={() => setIsCartOpen(true)}
+        onNavigate={navigate}
+      />
 
+      {/* ===== Pages ===== */}
       <main>
 
-        {/* LOGIN */}
-        {currentPage === 'login' && (
-          <Login onNavigate={navigate} />
-        )}
-
-        {/* PROTECTED PAGES */}
-        {session && currentPage === 'home' && (
+        {currentPage === 'home' && (
           <Home onNavigate={navigate} />
         )}
 
-        {session && currentPage === 'shop' && (
+        {currentPage === 'shop' && (
           <Shop
             onNavigate={navigate}
             onAddToCart={addToCart}
@@ -173,7 +113,7 @@ function App() {
           />
         )}
 
-        {session && currentPage === 'product' && currentProductId && (
+        {currentPage === 'product' && currentProductId && (
           <ProductDetails
             productId={currentProductId}
             onAddToCart={addToCart}
@@ -183,18 +123,16 @@ function App() {
 
       </main>
 
-      {/* CART only if logged in */}
-      {session && (
-        <CartDrawer
-          isOpen={isCartOpen}
-          onClose={() => setIsCartOpen(false)}
-          cart={cart}
-          onRemove={removeFromCart}
-          onIncrease={increaseQty}
-          onDecrease={decreaseQty}
-          clearCart={clearCart}
-        />
-      )}
+      {/* ===== Cart Drawer (WITH CHECKOUT INSIDE) ===== */}
+      <CartDrawer
+        isOpen={isCartOpen}
+        onClose={() => setIsCartOpen(false)}
+        cart={cart}
+        onRemove={removeFromCart}
+        onIncrease={increaseQty}
+        onDecrease={decreaseQty}
+        clearCart={clearCart}   // ✅ IMPORTANT
+      />
 
     </div>
   );
