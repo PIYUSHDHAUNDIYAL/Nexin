@@ -6,11 +6,15 @@ interface HomeProps {
 
 export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
-  // 🔥 Background images
+  // 🔥 Multiple banner images (real feel)
   const images = [
+    "https://images.unsplash.com/photo-1517336714731-489689fd1ca8",
     "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9",
-    "https://images.unsplash.com/photo-1498050108023-c5249f4df085",
-    "https://images.unsplash.com/photo-1517336714731-489689fd1ca8"
+    "https://images.unsplash.com/photo-1580910051074-3eb694886505",
+    "https://images.unsplash.com/photo-1585386959984-a41552262c4b",
+    "https://images.unsplash.com/photo-1593642632823-8f785ba67e45",
+    "https://images.unsplash.com/photo-1606813907291-d86efa9b94db",
+    "https://images.unsplash.com/photo-1607082349566-187342175e2f"
   ];
 
   const [index, setIndex] = useState(0);
@@ -18,7 +22,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   useEffect(() => {
     const interval = setInterval(() => {
       setIndex((prev) => (prev + 1) % images.length);
-    }, 3000);
+    }, 4000); // 🔥 smoother timing
 
     return () => clearInterval(interval);
   }, []);
@@ -26,14 +30,14 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
 
-      {/* ================= Hero Section with Slider ================= */}
+      {/* ================= Hero Section (Slider Background) ================= */}
       <div
         className="relative h-[500px] flex items-center justify-center text-center rounded-xl mb-20 overflow-hidden"
         style={{
           backgroundImage: `url(${images[index]})`,
           backgroundSize: "cover",
           backgroundPosition: "center",
-          transition: "background-image 0.7s ease-in-out"
+          transition: "all 1s ease-in-out"
         }}
       >
 
