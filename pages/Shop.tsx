@@ -22,6 +22,22 @@ export const Shop: React.FC<ShopProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // 🔥 NEW: SLIDER
+  const banners = [
+    "https://images.unsplash.com/photo-1517336714731-489689fd1ca8",
+    "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9",
+    "https://images.unsplash.com/photo-1580910051074-3eb694886505"
+  ];
+
+  const [bannerIndex, setBannerIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setBannerIndex((prev) => (prev + 1) % banners.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
   // ================= LOAD SEARCH =================
   useEffect(() => {
     setSearch(searchQuery);
@@ -106,12 +122,21 @@ export const Shop: React.FC<ShopProps> = ({
   return (
     <div className="max-w-7xl mx-auto px-4 py-10">
 
-      {/* HEADER */}
-      <div className="mb-10">
-        <h1 className="text-3xl font-bold">Shop</h1>
-        <p className="text-gray-500">
-          Discover products with smart recommendations
-        </p>
+      {/* 🔥 NEW SLIDING BANNER */}
+      <div
+        className="h-[260px] rounded-xl mb-10 flex items-center justify-center text-white relative overflow-hidden"
+        style={{
+          backgroundImage: `url(${banners[bannerIndex]})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center"
+        }}
+      >
+        <div className="absolute inset-0 bg-black/50"></div>
+
+        <div className="relative z-10 text-center">
+          <h1 className="text-3xl font-bold">Shop Smart</h1>
+          <p className="text-sm">AI-powered product discovery</p>
+        </div>
       </div>
 
       {/* SEARCH + SORT */}
