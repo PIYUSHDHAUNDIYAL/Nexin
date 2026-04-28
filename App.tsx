@@ -4,7 +4,7 @@ import { Home } from './pages/Home';
 import { Shop } from './pages/Shop';
 import { ProductDetails } from './pages/ProductDetails';
 import { CartDrawer } from './components/CartDrawer';
-import { Login } from './components/Login';
+import { Login } from './pages/Login';
 import { supabase } from './services/supabase';
 
 import { Product, CartItem } from './types';
