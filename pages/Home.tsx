@@ -6,7 +6,7 @@ interface HomeProps {
 
 export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
-  // 🔥 Multiple banner images (real feel)
+  // 🔥 Slider Images
   const images = [
     "https://images.unsplash.com/photo-1517336714731-489689fd1ca8",
     "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9",
@@ -22,15 +22,14 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   useEffect(() => {
     const interval = setInterval(() => {
       setIndex((prev) => (prev + 1) % images.length);
-    }, 4000); // 🔥 smoother timing
-
+    }, 4000);
     return () => clearInterval(interval);
   }, []);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
 
-      {/* ================= Hero Section (Slider Background) ================= */}
+      {/* ================= HERO SLIDER ================= */}
       <div
         className="relative h-[500px] flex items-center justify-center text-center rounded-xl mb-20 overflow-hidden"
         style={{
@@ -40,57 +39,67 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           transition: "all 1s ease-in-out"
         }}
       >
-
-        {/* 🔥 Overlay */}
         <div className="absolute inset-0 bg-gradient-to-r from-black/70 to-black/30"></div>
 
-        {/* 🔥 Content */}
         <div className="relative z-10 max-w-3xl text-white">
-
-          <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl md:text-6xl">
-            <span className="block xl:inline">Smart Shopping</span>{' '}
-            <span className="block text-indigo-400 xl:inline">Redefined</span>
+          <h1 className="text-4xl font-extrabold sm:text-5xl md:text-6xl">
+            Smart Shopping <span className="text-indigo-400">Redefined</span>
           </h1>
 
-          <p className="mt-6 text-base sm:text-lg text-gray-200">
-            Discover products with AI-powered recommendations, personalized just
-            for you.
+          <p className="mt-6 text-lg text-gray-200">
+            Discover products with AI-powered recommendations tailored for you
           </p>
 
-          <div className="mt-10 flex justify-center">
-            <button
-              onClick={() => onNavigate('shop')}
-              className="px-8 py-4 bg-indigo-600 text-white rounded-md text-base font-medium hover:bg-indigo-700 transition"
-            >
-              Go to Shop
-            </button>
-          </div>
-
+          <button
+            onClick={() => onNavigate('shop')}
+            className="mt-8 px-8 py-4 bg-indigo-600 rounded-lg hover:bg-indigo-700 hover:scale-105 transition"
+          >
+            Go to Shop
+          </button>
         </div>
       </div>
 
-      {/* ================= Trust Badges ================= */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 text-center">
-        <div className="p-8 bg-gray-50 rounded-xl">
-          <h3 className="font-semibold text-gray-900 text-lg">🤖 AI Powered</h3>
-          <p className="text-sm text-gray-500 mt-3">
-            Smart recommendations using machine learning
-          </p>
-        </div>
+      {/* ================= FEATURES ================= */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 text-center mb-16">
+        {[
+          { icon: "🤖", title: "AI Powered", desc: "Smart ML recommendations" },
+          { icon: "🔒", title: "Secure", desc: "Safe and reliable system" },
+          { icon: "⚡", title: "Fast", desc: "Optimized performance" }
+        ].map((item, i) => (
+          <div
+            key={i}
+            className="p-8 bg-white rounded-xl shadow hover:shadow-xl transition hover:-translate-y-1"
+          >
+            <div className="text-4xl mb-4">{item.icon}</div>
+            <h3 className="font-semibold text-gray-900 text-lg">{item.title}</h3>
+            <p className="text-sm text-gray-500 mt-2">{item.desc}</p>
+          </div>
+        ))}
+      </div>
 
-        <div className="p-8 bg-gray-50 rounded-xl">
-          <h3 className="font-semibold text-gray-900 text-lg">🔒 Secure</h3>
-          <p className="text-sm text-gray-500 mt-3">
-            Safe and reliable shopping experience
-          </p>
-        </div>
+      {/* ================= CATEGORY ================= */}
+      <div className="mb-16">
+        <h2 className="text-2xl font-bold mb-6">Shop by Category</h2>
 
-        <div className="p-8 bg-gray-50 rounded-xl">
-          <h3 className="font-semibold text-gray-900 text-lg">⚡ Fast</h3>
-          <p className="text-sm text-gray-500 mt-3">
-            Optimized performance with instant feedback
-          </p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          {["Mobiles", "Laptops", "Headphones", "Accessories"].map((cat) => (
+            <div
+              key={cat}
+              onClick={() => onNavigate('shop')}
+              className="bg-white p-6 rounded-xl shadow hover:shadow-lg cursor-pointer text-center hover:-translate-y-1 transition"
+            >
+              <p className="font-semibold">{cat}</p>
+            </div>
+          ))}
         </div>
+      </div>
+
+      {/* ================= TRENDING ================= */}
+      <div>
+        <h2 className="text-2xl font-bold mb-4">🔥 Trending Now</h2>
+        <p className="text-gray-500 text-sm">
+          Based on user activity and AI recommendations
+        </p>
       </div>
 
     </div>
