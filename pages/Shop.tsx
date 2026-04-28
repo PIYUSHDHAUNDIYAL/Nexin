@@ -22,7 +22,7 @@ export const Shop: React.FC<ShopProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // 🔥 FAST SLIDER
+  // 🔥 HERO SLIDER IMAGES
   const banners = [
     "https://images.unsplash.com/photo-1517336714731-489689fd1ca8",
     "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9",
@@ -35,7 +35,7 @@ export const Shop: React.FC<ShopProps> = ({
   useEffect(() => {
     const interval = setInterval(() => {
       setBannerIndex((prev) => (prev + 1) % banners.length);
-    }, 2000); // ⚡ faster
+    }, 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -125,7 +125,7 @@ export const Shop: React.FC<ShopProps> = ({
 
       {/* 🔥 HERO BANNER */}
       <div
-        className="h-[260px] rounded-xl mb-10 flex items-center justify-center text-white relative overflow-hidden transition-all duration-700"
+        className="h-[260px] rounded-xl mb-10 flex items-center justify-center text-white relative overflow-hidden"
         style={{
           backgroundImage: `url(${banners[bannerIndex]})`,
           backgroundSize: "cover",
@@ -136,14 +136,9 @@ export const Shop: React.FC<ShopProps> = ({
 
         <div className="relative z-10 text-center">
           <h1 className="text-3xl font-bold">Shop Smart</h1>
-          <p className="text-sm">AI-powered recommendations</p>
-
-          <button
-            onClick={() => onNavigate('cart')}
-            className="mt-4 px-5 py-2 bg-indigo-600 rounded-lg"
-          >
-            Go to Cart
-          </button>
+          <p className="text-sm text-gray-200">
+            AI-powered recommendations
+          </p>
         </div>
       </div>
 
@@ -211,11 +206,10 @@ export const Shop: React.FC<ShopProps> = ({
                 onToggleWishlist={toggleWishlist}
                 onClick={(id) => onNavigate('product', id)}
 
-                // 🔥 UPDATED CART FLOW
                 onAddToCart={(p, e) => {
                   e.stopPropagation();
                   onAddToCart(p);
-                  onNavigate('cart'); // ✅ DIRECT TO CART
+                  onNavigate('cart');
                 }}
               />
             ))}
