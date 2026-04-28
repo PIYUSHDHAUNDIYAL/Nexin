@@ -19,7 +19,6 @@ function App() {
 
   // ================= Navigation =================
   const navigate = (page: string, value?: string) => {
-
     if (page === 'product' && value) {
       setCurrentProductId(value);
       setCurrentPage('product');
@@ -83,6 +82,11 @@ function App() {
     setCart(prev => prev.filter(item => item.id !== id));
   };
 
+  // 🔥 NEW: CLEAR CART AFTER ORDER
+  const clearCart = () => {
+    setCart([]);
+  };
+
   // ================= UI =================
   return (
     <div className="min-h-screen bg-gray-50">
@@ -127,6 +131,7 @@ function App() {
         onRemove={removeFromCart}
         onIncrease={increaseQty}
         onDecrease={decreaseQty}
+        clearCart={clearCart}   // ✅ IMPORTANT
       />
 
     </div>
