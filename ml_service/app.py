@@ -12,12 +12,12 @@ import random
 # ---------------- Setup ---------------- #
 load_dotenv()
 
-app = Flask(_name_)
+app = Flask(__name__)
 
 # 🔥 CORS FIX (important for Vercel ↔ Render)
 CORS(
     app,
-    resources={r"/": {"origins": ""}},
+    resources={r"/*": {"origins": "*"}},
     supports_credentials=True
 )
 
@@ -225,6 +225,6 @@ def reload():
     return {"reloaded": True}
 
 # ---------------- Run ---------------- #
-if _name_ == "_main_":
+if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
