@@ -5,7 +5,7 @@ import { Shop } from './pages/Shop';
 import { ProductDetails } from './pages/ProductDetails';
 import { CartDrawer } from './components/CartDrawer';
 import { Login } from './pages/Login';
-import { supabase } from './services/supabaseClient';
+import { supabaseClient } from './services/supabaseClient';
 
 import { Product, CartItem } from './types';
 
