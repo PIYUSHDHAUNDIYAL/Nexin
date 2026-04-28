@@ -1,25 +1,39 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { Home } from './pages/Home';
 import { Shop } from './pages/Shop';
 import { ProductDetails } from './pages/ProductDetails';
 import { CartDrawer } from './components/CartDrawer';
+import { Login } from './components/Login'; // ✅ ADD THIS
+import { supabase } from './services/supabase'; // ✅ ADD THIS
 
 import { Product, CartItem } from './types';
 
-// ✅ ONLY 3 PAGES NOW
-type Page = 'home' | 'shop' | 'product';
+// ✅ ADDED 'login'
+type Page = 'home' | 'shop' | 'product' | 'login';
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('home');
+  const [currentPage, setCurrentPage] = useState<Page>('login'); // ✅ start from login
   const [currentProductId, setCurrentProductId] = useState<string | undefined>();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [shopSearch, setShopSearch] = useState('');
 
+  // ================= Auto Login Check =================
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        setCurrentPage('home');
+      }
+    });
+  }, []);
+
   // ================= Navigation =================
   const navigate = (page: string, value?: string) => {
-    if (page === 'product' && value) {
+    if (page === 'login') {
+      setCurrentPage('login');
+    }
+    else if (page === 'product' && value) {
       setCurrentProductId(value);
       setCurrentPage('product');
     } 
@@ -82,24 +96,36 @@ function App() {
     setCart(prev => prev.filter(item => item.id !== id));
   };
 
-  // 🔥 NEW: CLEAR CART AFTER ORDER
   const clearCart = () => {
     setCart([]);
+  };
+
+  // ================= Logout =================
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setCurrentPage('login');
   };
 
   // ================= UI =================
   return (
     <div className="min-h-screen bg-gray-50">
 
-      {/* ===== Navbar ===== */}
-      <Navbar
-        cart={cart}
-        onToggleCart={() => setIsCartOpen(true)}
-        onNavigate={navigate}
-      />
+      {/* ✅ Hide Navbar on Login Page */}
+      {currentPage !== 'login' && (
+        <Navbar
+          cart={cart}
+          onToggleCart={() => setIsCartOpen(true)}
+          onNavigate={navigate}
+          onLogout={handleLogout} // ✅ pass logout
+        />
+      )}
 
-      {/* ===== Pages ===== */}
       <main>
+
+        {/* ✅ LOGIN PAGE */}
+        {currentPage === 'login' && (
+          <Login onNavigate={navigate} />
+        )}
 
         {currentPage === 'home' && (
           <Home onNavigate={navigate} />
@@ -123,16 +149,18 @@ function App() {
 
       </main>
 
-      {/* ===== Cart Drawer (WITH CHECKOUT INSIDE) ===== */}
-      <CartDrawer
-        isOpen={isCartOpen}
-        onClose={() => setIsCartOpen(false)}
-        cart={cart}
-        onRemove={removeFromCart}
-        onIncrease={increaseQty}
-        onDecrease={decreaseQty}
-        clearCart={clearCart}   // ✅ IMPORTANT
-      />
+      {/* ✅ Hide cart on login */}
+      {currentPage !== 'login' && (
+        <CartDrawer
+          isOpen={isCartOpen}
+          onClose={() => setIsCartOpen(false)}
+          cart={cart}
+          onRemove={removeFromCart}
+          onIncrease={increaseQty}
+          onDecrease={decreaseQty}
+          clearCart={clearCart}
+        />
+      )}
 
     </div>
   );
