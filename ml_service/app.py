@@ -7,33 +7,24 @@ from functools import lru_cache
 import os
 import requests
 from dotenv import load_dotenv
+import random
 
 # ---------------- Setup ---------------- #
 load_dotenv()
 
 app = Flask(_name_)
+
+# 🔥 CORS FIX (important for Vercel ↔ Render)
 CORS(
     app,
-    resources={
-        r"/*": {
-            "origins": [
-                "https://nexin.vercel.app",
-                "https://nexin-seven.vercel.app"
-            ]
-        }
-    }
+    resources={r"/": {"origins": ""}},
+    supports_credentials=True
 )
 
 TOP_N = 5
-PRICE_RANGE = 0.30
-BRAND_BOOST = 0.05
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-ADMIN_RELOAD_TOKEN = os.getenv("ADMIN_RELOAD_TOKEN")
-
-if not SUPABASE_URL or not SUPABASE_KEY:
-    raise RuntimeError("❌ Supabase environment variables not set")
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -43,138 +34,197 @@ HEADERS = {
 
 # ---------------- Globals ---------------- #
 df = pd.DataFrame()
-tfidf_matrix = None
-cosine_sim = None
-indices = {}
-max_price = 1
+model_ready = False
 
-# ---------------- Load Data ---------------- #
+# ---------------- Load FULL Data ---------------- #
 def load_products():
-    url = f"{SUPABASE_URL}/rest/v1/products?select=id,name,brand,category,description,price"
-    res = requests.get(url, headers=HEADERS, timeout=30)
+    all_data = []
+    start = 0
+    batch = 200
 
-    if res.status_code != 200:
-        print("❌ Supabase fetch failed:", res.text)
-        return pd.DataFrame()
+    while True:
+        url = f"{SUPABASE_URL}/rest/v1/products?select=id,name,brand,category,description,price,image&limit={batch}&offset={start}"
+        res = requests.get(url, headers=HEADERS)
 
-    data = res.json()
-    print(f"✅ Loaded {len(data)} products from Supabase")
-    return pd.DataFrame(data)
+        if res.status_code != 200:
+            print("❌ Supabase error:", res.text)
+            break
 
-# ---------------- Cached Recommendation ---------------- #
-@lru_cache(maxsize=5000)
-def cached_recommend(product_id: str):
-    if product_id not in indices:
-        return []
+        data = res.json()
 
-    idx = indices[product_id]
-    base = df.loc[idx]
+        if not data:
+            break
 
-    base_category = base["category"]
-    base_brand = base["brand"]
-    base_price = base["price"]
+        all_data.extend(data)
+        start += batch
 
-    candidate_indices = df[df["category"] == base_category].index.tolist()
-    if len(candidate_indices) <= 1:
-        candidate_indices = df.index.tolist()
+    print(f"✅ Total products loaded: {len(all_data)}")
+    return pd.DataFrame(all_data)
 
-    scores = []
-
-    for i in candidate_indices:
-        if i == idx:
-            continue
-
-        text_sim = cosine_sim[idx][i]
-
-        if base_price > 0 and abs(df.loc[i, "price"] - base_price) > PRICE_RANGE * base_price:
-            continue
-
-        price_sim = (
-            1 - abs(df.loc[i, "price"] - base_price) / max_price
-            if base_price > 0 else 0
-        )
-
-        brand_sim = BRAND_BOOST if df.loc[i, "brand"] == base_brand else 0
-        final_score = (0.80 * text_sim) + (0.15 * price_sim) + brand_sim
-        scores.append((i, final_score))
-
-    scores.sort(key=lambda x: x[1], reverse=True)
-
-    if len(scores) < TOP_N:
-        fallback = [(i, cosine_sim[idx][i]) for i in df.index if i != idx]
-        fallback.sort(key=lambda x: x[1], reverse=True)
-        scores.extend(fallback)
-
-    return df.loc[[i[0] for i in scores[:TOP_N]], "id"].astype(str).tolist()
-
-# ---------------- Build / Rebuild Model ---------------- #
+# ---------------- Build Model ---------------- #
 def rebuild_model():
-    global df, tfidf_matrix, cosine_sim, indices, max_price
+    global df
 
     df = load_products()
+
     if df.empty:
-        print("❌ ML rebuild failed: no data")
+        print("❌ No data found")
         return False
 
     for col in ["name", "brand", "category", "description"]:
         df[col] = df[col].fillna("").astype(str)
 
-    df["price"] = pd.to_numeric(df["price"], errors="coerce").fillna(0)
+    df["id"] = df["id"].astype(str)
 
-    df["soup"] = df["name"] + " " + df["brand"] + " " + df["category"] + " " + df["description"]
-
-    tfidf = TfidfVectorizer(
-        stop_words="english",
-        ngram_range=(1, 2),
-        max_df=0.8,
-        min_df=1
-    )
-
-    tfidf_matrix = tfidf.fit_transform(df["soup"])
-    cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
-
-    indices = pd.Series(df.index, index=df["id"].astype(str)).drop_duplicates()
-    max_price = df["price"].max() if df["price"].max() > 0 else 1
-
-    cached_recommend.cache_clear()
-    print("♻️ ML model rebuilt & cache cleared")
+    print("✅ Model ready")
     return True
 
-# Initial load (safe now)
-rebuild_model()
+# ---------------- Lazy Load ---------------- #
+def ensure_model():
+    global model_ready
+    if not model_ready:
+        print("⚡ Loading model...")
+        success = rebuild_model()
+        model_ready = success
+
+# ---------------- Fallback ---------------- #
+def fallback():
+    if df.empty:
+        return []
+    return df["id"].sample(min(TOP_N, len(df))).tolist()
+
+# ---------------- Recommendation ---------------- #
+@lru_cache(maxsize=5000)
+def cached_recommend(product_id: str):
+
+    if product_id not in df["id"].values:
+        return fallback()
+
+    current = df[df["id"] == product_id].iloc[0]
+
+    filtered = df[df["category"] == current["category"]]
+    if len(filtered) < 5:
+        filtered = df
+
+    tfidf = TfidfVectorizer(stop_words="english")
+
+    texts = (
+        filtered["name"] + " " +
+        filtered["brand"] + " " +
+        filtered["description"]
+    )
+
+    matrix = tfidf.fit_transform(texts)
+
+    current_text = f"{current['name']} {current['brand']} {current['description']}"
+    current_vec = tfidf.transform([current_text])
+
+    scores = cosine_similarity(current_vec, matrix).flatten()
+
+    boost = (filtered["brand"] == current["brand"]).astype(int) * 0.2
+    final_scores = scores + boost
+
+    top_indices = final_scores.argsort()[::-1]
+
+    results = []
+    for idx in top_indices:
+        pid = str(filtered.iloc[idx]["id"])
+        if pid != product_id:
+            results.append(pid)
+        if len(results) >= TOP_N:
+            break
+
+    if not results:
+        return fallback()
+
+    return results
+
+# ---------------- AI EXPLAINER (SMART) ---------------- #
+@app.route("/explain", methods=["POST"])
+def explain():
+    ensure_model()
+
+    data = request.get_json()
+
+    if not data or "product_id" not in data:
+        return jsonify({"reasons": ["Popular product among users"]})
+
+    product_id = str(data.get("product_id"))
+
+    if product_id not in df["id"].values:
+        return jsonify({"reasons": ["Trending product in this category"]})
+
+    product = df[df["id"] == product_id].iloc[0]
+
+    reasons = []
+
+    # 🔥 Dynamic AI-like templates
+    category_templates = [
+        f"This {product['category']} is currently trending",
+        f"Popular choice in the {product['category']} segment",
+        f"Highly preferred in {product['category']} products"
+    ]
+
+    brand_templates = [
+        f"{product['brand']} is known for strong performance and reliability",
+        f"Trusted brand: {product['brand']} with consistent quality",
+        f"{product['brand']} offers durable and feature-rich products"
+    ]
+
+    price_templates = [
+        "Offers great value for money",
+        "Competitively priced for its features",
+        "Balanced pricing with solid performance"
+    ]
+
+    smart_templates = [
+        "Matches user interest based on similar browsing patterns",
+        "Frequently selected alongside similar products",
+        "Recommended based on current shopping trends"
+    ]
+
+    if product["category"]:
+        reasons.append(random.choice(category_templates))
+
+    if product["brand"]:
+        reasons.append(random.choice(brand_templates))
+
+    if product["price"]:
+        reasons.append(random.choice(price_templates))
+
+    reasons.append(random.choice(smart_templates))
+
+    return jsonify({"reasons": reasons})
 
 # ---------------- Routes ---------------- #
-@app.route("/", methods=["GET"])
+@app.route("/")
 def root():
-    return jsonify({
-        "service": "Nexin ML Recommendation API",
-        "status": "running"
-    })
+    return {"status": "running"}
 
-@app.route("/health", methods=["GET"])
+@app.route("/health")
 def health():
-    return jsonify({
-        "status": "ML Service Running",
-        "products_loaded": int(len(df))
-    })
+    return {"status": "ok", "products": len(df)}
 
 @app.route("/recommend", methods=["POST"])
 def recommend():
-    payload = request.get_json(force=True)
-    product_id = str(payload.get("product_id", ""))
+    ensure_model()
+
+    data = request.get_json()
+
+    if not data or "product_id" not in data:
+        return jsonify(fallback())
+
+    product_id = str(data.get("product_id"))
+
     return jsonify(cached_recommend(product_id))
 
 @app.route("/reload", methods=["POST"])
-def reload_model():
-    token = request.headers.get("X-ADMIN-TOKEN")
-    if token != ADMIN_RELOAD_TOKEN:
-        return jsonify({"error": "Unauthorized"}), 401
-
-    success = rebuild_model()
-    return jsonify({"reloaded": success})
+def reload():
+    global model_ready
+    model_ready = False
+    return {"reloaded": True}
 
 # ---------------- Run ---------------- #
 if _name_ == "_main_":
-    port = int(os.environ.get("PORT", 5000))
-    print(f"🚀 Nexin ML Service running on port {port}")
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
