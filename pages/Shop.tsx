@@ -22,11 +22,12 @@ export const Shop: React.FC<ShopProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // 🔥 NEW: SLIDER
+  // 🔥 FAST SLIDER
   const banners = [
     "https://images.unsplash.com/photo-1517336714731-489689fd1ca8",
     "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9",
-    "https://images.unsplash.com/photo-1580910051074-3eb694886505"
+    "https://images.unsplash.com/photo-1580910051074-3eb694886505",
+    "https://images.unsplash.com/photo-1542751371-adc38448a05e"
   ];
 
   const [bannerIndex, setBannerIndex] = useState(0);
@@ -34,7 +35,7 @@ export const Shop: React.FC<ShopProps> = ({
   useEffect(() => {
     const interval = setInterval(() => {
       setBannerIndex((prev) => (prev + 1) % banners.length);
-    }, 3000);
+    }, 2000); // ⚡ faster
     return () => clearInterval(interval);
   }, []);
 
@@ -43,7 +44,7 @@ export const Shop: React.FC<ShopProps> = ({
     setSearch(searchQuery);
   }, [searchQuery]);
 
-  // ================= LOAD WISHLIST =================
+  // ================= WISHLIST =================
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem('wishlist') || '[]');
     setWishlist(saved);
@@ -122,25 +123,32 @@ export const Shop: React.FC<ShopProps> = ({
   return (
     <div className="max-w-7xl mx-auto px-4 py-10">
 
-      {/* 🔥 NEW SLIDING BANNER */}
+      {/* 🔥 HERO BANNER */}
       <div
-        className="h-[260px] rounded-xl mb-10 flex items-center justify-center text-white relative overflow-hidden"
+        className="h-[260px] rounded-xl mb-10 flex items-center justify-center text-white relative overflow-hidden transition-all duration-700"
         style={{
           backgroundImage: `url(${banners[bannerIndex]})`,
           backgroundSize: "cover",
           backgroundPosition: "center"
         }}
       >
-        <div className="absolute inset-0 bg-black/50"></div>
+        <div className="absolute inset-0 bg-black/60"></div>
 
         <div className="relative z-10 text-center">
           <h1 className="text-3xl font-bold">Shop Smart</h1>
-          <p className="text-sm">AI-powered product discovery</p>
+          <p className="text-sm">AI-powered recommendations</p>
+
+          <button
+            onClick={() => onNavigate('cart')}
+            className="mt-4 px-5 py-2 bg-indigo-600 rounded-lg"
+          >
+            Go to Cart
+          </button>
         </div>
       </div>
 
       {/* SEARCH + SORT */}
-      <div className="sticky top-20 mb-8 bg-white p-4 border flex flex-wrap gap-3">
+      <div className="sticky top-20 mb-8 bg-white p-4 border flex flex-wrap gap-3 rounded-lg shadow-sm">
 
         <input
           type="text"
@@ -169,10 +177,10 @@ export const Shop: React.FC<ShopProps> = ({
           <button
             key={category}
             onClick={() => setActiveCategory(category)}
-            className={`px-4 py-1.5 rounded-full text-sm ${
+            className={`px-4 py-1.5 rounded-full text-sm transition ${
               activeCategory === category
                 ? 'bg-indigo-600 text-white'
-                : 'bg-gray-100'
+                : 'bg-gray-100 hover:bg-gray-200'
             }`}
           >
             {category}
@@ -194,6 +202,7 @@ export const Shop: React.FC<ShopProps> = ({
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+
             {filteredProducts.map(product => (
               <ProductCard
                 key={product.id}
@@ -201,12 +210,16 @@ export const Shop: React.FC<ShopProps> = ({
                 isWishlisted={wishlist.includes(product.id)}
                 onToggleWishlist={toggleWishlist}
                 onClick={(id) => onNavigate('product', id)}
+
+                // 🔥 UPDATED CART FLOW
                 onAddToCart={(p, e) => {
                   e.stopPropagation();
                   onAddToCart(p);
+                  onNavigate('cart'); // ✅ DIRECT TO CART
                 }}
               />
             ))}
+
           </div>
         )}
       </section>
