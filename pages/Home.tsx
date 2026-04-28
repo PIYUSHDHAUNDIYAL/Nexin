@@ -90,23 +90,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
       </div>
 
-      {/* ================= FEATURED (NO BUTTON) ================= */}
-      <div className="bg-white p-6 rounded-xl shadow flex flex-col sm:flex-row items-center justify-between">
-
-        <div>
-          <p className="text-sm text-gray-400">Special Offer</p>
-          <h2 className="text-2xl font-bold">Gaming Console</h2>
-          <p className="text-sm text-gray-500 mt-2">
-            Next-gen performance & immersive experience
-          </p>
-        </div>
-
-        <img
-          src="https://images.unsplash.com/photo-1606813907291-d86efa9b94db"
-          className="w-40 mt-4 sm:mt-0 rounded-lg"
-        />
-
-      </div>
+      
 
       {/* ================= FEATURES ================= */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center mt-16">
