@@ -5,15 +5,10 @@ import { Shop } from './pages/Shop';
 import { ProductDetails } from './pages/ProductDetails';
 import { CartDrawer } from './components/CartDrawer';
 
-// 🔥 NEW IMPORTS
-import { Cart } from './pages/Cart';
-import { Checkout } from './pages/Checkout';
-import { Success } from './pages/Success';
-
 import { Product, CartItem } from './types';
 
-// 🔥 ADD NEW PAGES
-type Page = 'home' | 'shop' | 'product' | 'cart' | 'checkout' | 'success';
+// ✅ ONLY 3 PAGES NOW
+type Page = 'home' | 'shop' | 'product';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
@@ -34,18 +29,6 @@ function App() {
       setCurrentProductId(undefined);
       setCurrentPage('shop');
     } 
-    else if (page === 'cart') {
-      setIsCartOpen(false); // 🔥 close drawer if open
-      setCurrentPage('cart');
-    }
-    else if (page === 'checkout') {
-      setIsCartOpen(false);
-      setCurrentPage('checkout');
-    }
-    else if (page === 'success') {
-      setCart([]); // 🔥 clear cart after order
-      setCurrentPage('success');
-    }
     else {
       setCurrentProductId(undefined);
       setCurrentPage('home');
@@ -134,24 +117,9 @@ function App() {
           />
         )}
 
-        {/* 🔥 NEW CART PAGE */}
-        {currentPage === 'cart' && (
-          <Cart cart={cart} onNavigate={navigate} />
-        )}
-
-        {/* 🔥 NEW CHECKOUT */}
-        {currentPage === 'checkout' && (
-          <Checkout onNavigate={navigate} />
-        )}
-
-        {/* 🔥 SUCCESS PAGE */}
-        {currentPage === 'success' && (
-          <Success />
-        )}
-
       </main>
 
-      {/* ===== Cart Drawer ===== */}
+      {/* ===== Cart Drawer (WITH CHECKOUT INSIDE) ===== */}
       <CartDrawer
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
@@ -160,18 +128,6 @@ function App() {
         onIncrease={increaseQty}
         onDecrease={decreaseQty}
       />
-
-      {/* 🔥 QUICK CHECKOUT BUTTON (inside drawer idea) */}
-      {isCartOpen && cart.length > 0 && (
-        <div className="fixed bottom-5 right-5">
-          <button
-            onClick={() => navigate('checkout')}
-            className="bg-green-600 text-white px-6 py-3 rounded-full shadow-lg"
-          >
-            Checkout →
-          </button>
-        </div>
-      )}
 
     </div>
   );
