@@ -5,16 +5,12 @@ interface NavbarProps {
   cart: CartItem[];
   onToggleCart: () => void;
   onNavigate: (page: string, query?: string) => void;
-  onLogout: () => void; // ✅ NEW
-  isLoggedIn?: boolean; // ✅ OPTIONAL (for better control)
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   cart,
   onToggleCart,
   onNavigate,
-  onLogout,
-  isLoggedIn = true, // default true if not passed
 }) => {
   const [search, setSearch] = useState('');
   const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
@@ -45,7 +41,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </span>
           </div>
 
-          {/* ===== SEARCH ===== */}
+          {/* ===== SEARCH (Desktop) ===== */}
           <form
             onSubmit={handleSearch}
             className="hidden md:flex flex-1 max-w-md mx-6"
@@ -81,7 +77,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* ===== ACTIONS ===== */}
           <div className="flex items-center gap-5">
-
             <button
               onClick={() => onNavigate('home')}
               className="hidden sm:block text-sm font-medium text-gray-600 hover:text-indigo-600 transition"
@@ -95,23 +90,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               Shop
             </button>
-
-            {/* ✅ LOGIN / LOGOUT */}
-            {isLoggedIn ? (
-              <button
-                onClick={onLogout}
-                className="text-sm font-semibold text-red-500 hover:text-red-600 transition"
-              >
-                Logout
-              </button>
-            ) : (
-              <button
-                onClick={() => onNavigate('login')}
-                className="text-sm font-semibold text-indigo-600 hover:text-indigo-700 transition"
-              >
-                Login
-              </button>
-            )}
 
             {/* Cart */}
             <button
@@ -151,7 +129,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </span>
               )}
             </button>
-
           </div>
         </div>
       </div>
