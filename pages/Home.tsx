@@ -23,7 +23,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     return () => clearInterval(interval);
   }, []);
 
-  // 🔥 Fake but smart activity data
+  // 🔥 Simple analytics
   const visits = Number(localStorage.getItem("visits") || 0) + 1;
   localStorage.setItem("visits", String(visits));
 
@@ -84,7 +84,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
         </div>
 
-        {/* 🔥 PREMIUM GRAPH */}
+        {/* 🔥 CLEAN GRAPH (NO ANIMATION) */}
         <div>
           <p className="text-sm text-gray-500 mb-3">Weekly Activity</p>
 
@@ -94,11 +94,8 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
               <div key={i} className="flex flex-col items-center">
 
                 <div
-                  className="w-8 rounded-lg bg-gradient-to-t from-indigo-500 to-purple-500 transition-all duration-700 ease-in-out hover:scale-110"
-                  style={{
-                    height: `${val}%`,
-                    animation: `growBar 1s ease ${i * 0.1}s forwards`
-                  }}
+                  className="w-8 rounded-lg bg-indigo-500 hover:scale-110 transition"
+                  style={{ height: `${val}%` }}
                 ></div>
 
                 <span className="text-xs text-gray-400 mt-1">
