@@ -4,9 +4,16 @@ import { Home } from './pages/Home';
 import { Shop } from './pages/Shop';
 import { ProductDetails } from './pages/ProductDetails';
 import { CartDrawer } from './components/CartDrawer';
+
+// 🔥 NEW IMPORTS
+import { Cart } from './pages/Cart';
+import { Checkout } from './pages/Checkout';
+import { Success } from './pages/Success';
+
 import { Product, CartItem } from './types';
 
-type Page = 'home' | 'shop' | 'product';
+// 🔥 ADD NEW PAGES
+type Page = 'home' | 'shop' | 'product' | 'cart' | 'checkout' | 'success';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
@@ -15,54 +22,66 @@ function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [shopSearch, setShopSearch] = useState('');
 
- // ================= Navigation =================
-const navigate = (page: string, value?: string) => {
-  if (page === 'product' && value) {
-    setCurrentProductId(value);
-    setCurrentPage('product');
-  } 
-  else if (page === 'shop') {
-    setShopSearch(value || '');
-    setCurrentProductId(undefined);
-    setCurrentPage('shop');
-  } 
-  else {
-    // home or fallback
-    setCurrentProductId(undefined);
-    setCurrentPage('home');
-  }
+  // ================= Navigation =================
+  const navigate = (page: string, value?: string) => {
 
-  window.scrollTo(0, 0);
-};
+    if (page === 'product' && value) {
+      setCurrentProductId(value);
+      setCurrentPage('product');
+    } 
+    else if (page === 'shop') {
+      setShopSearch(value || '');
+      setCurrentProductId(undefined);
+      setCurrentPage('shop');
+    } 
+    else if (page === 'cart') {
+      setIsCartOpen(false); // 🔥 close drawer if open
+      setCurrentPage('cart');
+    }
+    else if (page === 'checkout') {
+      setIsCartOpen(false);
+      setCurrentPage('checkout');
+    }
+    else if (page === 'success') {
+      setCart([]); // 🔥 clear cart after order
+      setCurrentPage('success');
+    }
+    else {
+      setCurrentProductId(undefined);
+      setCurrentPage('home');
+    }
 
+    window.scrollTo(0, 0);
+  };
 
-const increaseQty = (id: string) => {
-  setCart(prev =>
-    prev.map(item =>
-      item.id === id
-        ? { ...item, quantity: item.quantity + 1 }
-        : item
-    )
-  );
-};
-
-const decreaseQty = (id: string) => {
-  setCart(prev =>
-    prev
-      .map(item =>
+  // ================= Quantity =================
+  const increaseQty = (id: string) => {
+    setCart(prev =>
+      prev.map(item =>
         item.id === id
-          ? { ...item, quantity: item.quantity - 1 }
+          ? { ...item, quantity: item.quantity + 1 }
           : item
       )
-      .filter(item => item.quantity > 0)
-  );
-};
+    );
+  };
 
+  const decreaseQty = (id: string) => {
+    setCart(prev =>
+      prev
+        .map(item =>
+          item.id === id
+            ? { ...item, quantity: item.quantity - 1 }
+            : item
+        )
+        .filter(item => item.quantity > 0)
+    );
+  };
 
-  // ================= Cart Logic =================
+  // ================= Cart =================
   const addToCart = (product: Product) => {
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id);
+
       if (existing) {
         return prev.map(item =>
           item.id === product.id
@@ -70,8 +89,10 @@ const decreaseQty = (id: string) => {
             : item
         );
       }
+
       return [...prev, { ...product, quantity: 1 }];
     });
+
     setIsCartOpen(true);
   };
 
@@ -82,6 +103,7 @@ const decreaseQty = (id: string) => {
   // ================= UI =================
   return (
     <div className="min-h-screen bg-gray-50">
+
       {/* ===== Navbar ===== */}
       <Navbar
         cart={cart}
@@ -91,6 +113,7 @@ const decreaseQty = (id: string) => {
 
       {/* ===== Pages ===== */}
       <main>
+
         {currentPage === 'home' && (
           <Home onNavigate={navigate} />
         )}
@@ -101,7 +124,6 @@ const decreaseQty = (id: string) => {
             onAddToCart={addToCart}
             searchQuery={shopSearch}
           />
-
         )}
 
         {currentPage === 'product' && currentProductId && (
@@ -111,17 +133,45 @@ const decreaseQty = (id: string) => {
             onNavigate={navigate}
           />
         )}
+
+        {/* 🔥 NEW CART PAGE */}
+        {currentPage === 'cart' && (
+          <Cart cart={cart} onNavigate={navigate} />
+        )}
+
+        {/* 🔥 NEW CHECKOUT */}
+        {currentPage === 'checkout' && (
+          <Checkout onNavigate={navigate} />
+        )}
+
+        {/* 🔥 SUCCESS PAGE */}
+        {currentPage === 'success' && (
+          <Success />
+        )}
+
       </main>
 
       {/* ===== Cart Drawer ===== */}
       <CartDrawer
-    isOpen={isCartOpen}
-    onClose={() => setIsCartOpen(false)}
-    cart={cart}
-    onRemove={removeFromCart}
-    onIncrease={increaseQty}
-    onDecrease={decreaseQty}
+        isOpen={isCartOpen}
+        onClose={() => setIsCartOpen(false)}
+        cart={cart}
+        onRemove={removeFromCart}
+        onIncrease={increaseQty}
+        onDecrease={decreaseQty}
       />
+
+      {/* 🔥 QUICK CHECKOUT BUTTON (inside drawer idea) */}
+      {isCartOpen && cart.length > 0 && (
+        <div className="fixed bottom-5 right-5">
+          <button
+            onClick={() => navigate('checkout')}
+            className="bg-green-600 text-white px-6 py-3 rounded-full shadow-lg"
+          >
+            Checkout →
+          </button>
+        </div>
+      )}
 
     </div>
   );
